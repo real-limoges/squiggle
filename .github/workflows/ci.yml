@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL
+        run: sudo apt-get update && sudo apt-get install -y sbcl
+
+      - name: Load system and run smoke test
+        run: |
+          sbcl --non-interactive \
+               --eval "(require :asdf)" \
+               --eval "(push (truename \".\") asdf:*central-registry*)" \
+               --eval "(asdf:load-system :squiggle)" \
+               --eval "(squiggle::demo 1)"
