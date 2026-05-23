@@ -1,0 +1,43 @@
+# Common Lisp
+*.fasl
+*.fas
+*.lib
+*.dfsl
+*.pfsl
+*.d64fsl
+*.p64fsl
+*.lx64fsl
+*.lx32fsl
+*.dx64fsl
+*.dx32fsl
+*.fx64fsl
+*.fx32fsl
+*.sx64fsl
+*.sx32fsl
+*.wx64fsl
+*.wx32fsl
+*.abcl
+*.jar
+
+# SBCL / Quicklisp
+.sbclrc.local
+system-index.txt
+build/
+.cache/
+.slime-history.eli
+.swank.lisp
+
+# Qlot
+.qlot/
+qlfile.lock.local
+
+# Editor
+*~
+\#*\#
+.\#*
+.DS_Store
+
+# Project-specific
+corpus/
+docs/
+CLAUDE.md
