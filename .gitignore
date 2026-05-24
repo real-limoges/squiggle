@@ -41,3 +41,5 @@ qlfile.lock.local
 corpus/
 docs/
 CLAUDE.md
+
+.vscode
