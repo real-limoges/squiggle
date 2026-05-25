@@ -3,17 +3,11 @@
 ;;;; A self-evolving abstract composition based on the Jazz design
 
 
-;;; --- PACKAGE ---
-
-(defpackage :squiggle
-  (:use :cl)
-  (:export :*state* :demo :tick! :apply-mutations :fake-oracle :llm-oracle))
-
 (in-package :squiggle)
 
 ;;; --- CONSTANTS ---
 
-(defparameter *palette* '(:teal :coral :cream :ink :mustard)
+(defparameter +palette+ '(:teal :coral :cream :ink :mustard)
   "The fixed set of colors the composition lives within.")
 
 (defparameter +canvas-w+ 800)
@@ -135,7 +129,6 @@
 
 ;;; --- TICK LOOP ---
 
-; This is what I change to switch it to the llm-oracle
 (defun tick! (&optional (oracle #'fake-oracle))
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."

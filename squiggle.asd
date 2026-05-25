@@ -8,8 +8,19 @@
   :depends-on (#:dexador #:com.inuoe.jzon)
   :pathname "src/"
   :serial t
-  :components ((:file "squiggle")
+  :components ((:file "package")
+               (:file "squiggle")
+               (:file "mutation")
                (:file "fake-oracle")
                (:file "llm-oracle")
-               (:file "mutation")
                (:file "inspect")))
+
+(asdf:defsystem :squiggle/tests
+  :depends-on (#:squiggle #:fiveam)
+  :pathname "tests/"
+  :serial t
+  :components ((:file "package")
+               (:file "squiggle-tests")
+               (:file "mutation-tests"))
+  :perform (asdf:test-op (op c)
+              (uiop:symbol-call :fiveam :run! :squiggle)))

@@ -21,11 +21,11 @@
   (+ 0.8 (/ (random 41 rng) 100.0)))
 
 (defun gen-nudge   (state rng) (list :nudge (random-id state rng) (random-delta rng) (random-delta rng)))
-(defun gen-recolor (state rng) (list :recolor (random-id state rng) (random-elt *palette* rng)))
+(defun gen-recolor (state rng) (list :recolor (random-id state rng) (random-elt +palette+ rng)))
 (defun gen-resize  (state rng) (list :resize (random-id state rng) (random-factor rng)))
 (defun gen-add     (state rng) (declare (ignore state))
   (list :add (random-elt +entity-types+ rng)
-        (random +canvas-w+ rng) (random +canvas-h+ rng) (random-elt *palette* rng)))
+        (random +canvas-w+ rng) (random +canvas-h+ rng) (random-elt +palette+ rng)))
 (defun gen-remove  (state rng) (list :remove (random-id state rng)))
 
 (defparameter *generators*

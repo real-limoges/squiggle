@@ -28,8 +28,7 @@ jobs:
       - name: Install dependencies
         run: qlot install
 
-      - name: Load system and run smoke test
+      - name: Run tests
         run: |
           qlot exec sbcl --non-interactive \
-               --eval "(asdf:load-system :squiggle)" \
-               --eval "(squiggle::demo 1)"
+               --eval "(asdf:test-system :squiggle/tests)"
