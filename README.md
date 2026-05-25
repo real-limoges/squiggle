@@ -20,7 +20,7 @@ sbcl --non-interactive \
      --load ~/quicklisp/setup.lisp \
      --eval "(push #p\"$(pwd)/\" asdf:*central-registry*)" \
      --eval '(ql:quickload :squiggle/tests)' \
-     --eval '(uiop:quit (if (fiveam:run-all-tests :squiggle) 0 1))'
+     --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run! :squiggle) 0 1))'
 ```
 
 **Lint**

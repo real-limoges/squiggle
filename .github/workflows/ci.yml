@@ -47,4 +47,4 @@ jobs:
                --load ~/quicklisp/setup.lisp \
                --eval "(push #p\"$GITHUB_WORKSPACE/\" asdf:*central-registry*)" \
                --eval '(ql:quickload :squiggle/tests)' \
-               --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run-all-tests :squiggle) 0 1))'
+               --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run! :squiggle) 0 1))'
