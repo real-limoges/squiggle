@@ -14,21 +14,25 @@ jobs:
       - name: Install SBCL
         run: sudo apt-get update && sudo apt-get install -y sbcl curl
 
-      - name: Install Qlot
-        run: |
-          curl -L https://qlot.tech/installer | bash
-          echo "$HOME/.qlot/bin" >> $GITHUB_PATH
-
-      - name: Cache Qlot deps
+      - name: Cache Quicklisp
         uses: actions/cache@v4
         with:
-          path: .qlot
-          key: qlot-${{ runner.os }}-${{ hashFiles('qlfile.lock', 'qlfile') }}
+          path: ~/quicklisp
+          key: quicklisp-${{ runner.os }}
 
-      - name: Install dependencies
-        run: qlot install
+      - name: Install Quicklisp
+        run: |
+          if [ ! -f ~/quicklisp/setup.lisp ]; then
+            curl -O https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+                 --load quicklisp.lisp \
+                 --eval '(quicklisp-quickstart:install)'
+          fi
 
       - name: Run tests
         run: |
-          qlot exec sbcl --non-interactive \
-               --eval "(asdf:test-system :squiggle/tests)"
+          sbcl --non-interactive \
+               --load ~/quicklisp/setup.lisp \
+               --eval "(push #p\"$GITHUB_WORKSPACE/\" asdf:*central-registry*)" \
+               --eval '(ql:quickload :squiggle/tests)' \
+               --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run-all-tests :squiggle) 0 1))'
