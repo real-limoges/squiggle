@@ -22,7 +22,7 @@
 (defparameter +max-scale+ 2.5)
 (defparameter +entity-types+ '(:blob :squiggle :triangle :curve))
 
-;;; --- PRNG ---
+;;; --- RNG ---
 
 (defvar *oracle-rng* nil)
 (defvar *jitter-rng* nil)
@@ -41,36 +41,35 @@
         *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
 
 
-;;; --- STATE ---
-;;; ENTITY: (:id 1 :type :blob :pos (220 180) :scale 1.3 :color :coral)
-;;; STATE:  (:palette (...) :next-id N :entities (entity ...))
+;;; --- STRUCTS ---
 
-(defparameter *state*
-  (list :palette *palette*
-        :next-id 4
-        :entities
-        (list
-         (list :id 1 :type :blob     :pos '(220 180) :scale 1.3 :color :coral)
-         (list :id 2 :type :squiggle :pos '(400 320) :scale 1.0 :color :teal)
-         (list :id 3 :type :triangle :pos '(560 200) :scale 0.8 :color :ink)))
-  "The live composition. Rebound to a fresh value each tick.")
+(defstruct entity
+  id type pos scale color layer)
+
+(defstruct canvas
+  (next-id 1)
+  (entities '()))
+
+;;; --- STATE ---
+
+(defparameter *state* (make-canvas))
 
 ;;; --- ACCESSORS ---
 
 (defun entities (state)
-  (getf state :entities))
+  (canvas-entities state))
 
 (defun find-entity (state id)
   "Return the entity plist with the given ID, or NIL."
-  (find id (entities state) :key (lambda (e) (getf e :id))))
+  (find id (entities state) :key (lambda (e) (entity-id e))))
 
 ;;; --- STATE CONSTRUCTORS ---
 ;;; Every change returns a NEW state — never mutate in place.
 
 (defun with-entities (state new-entities)
   "Return a copy of STATE whose entity list is NEW-ENTITIES."
-  (let ((copy (copy-list state)))
-    (setf (getf copy :entities) new-entities)
+  (let ((copy (copy-canvas state)))
+    (setf (canvas-entities copy) new-entities)
     copy))
 
 (defun update-entity (state id fn)
@@ -82,16 +81,18 @@
       (with-entities
         state
         (mapcar (lambda (e)
-                  (if (= (getf e :id) id) (funcall fn (copy-list e)) e))
+                  (if (= (entity-id e) id) (funcall fn (copy-entity e)) e))
                 (entities state)))))
 
-(defun set-prop (entity key value)
-  "Set KEY to VALUE on a (copied) ENTITY plist and return it.
-   Meant to be used as the FN passed to `update-entity`."
-  (setf (getf entity key) value)
-  entity)
-
 ;;; --- DISPATCH ---
+
+(defun stamp-layers (mutations jitter-rng)
+  "Rewrites each :add in MUTATIONS to carry a random :layer drawn from JITTER-RNG"
+  (mapcar (lambda (m)
+          (if (eq (first m) :add)
+              (append m (list :layer (random most-positive-fixnum jitter-rng)))
+              m))
+              mutations))
 
 (defun apply-mutation (state mutation)
   "Apply a single MUTATION s-expression to STATE, returning a new state.
@@ -117,9 +118,20 @@
   (unless *oracle-rng*
     (seed-rngs! (entropy-seed))))
 
-(defun reset! ()
-  "Reset engine state."
-  (error "reset! not yet implemented"))
+(defun make-seed-canvas ()
+  "Return a fixed REPL-friendly starting composition with hardcoded layers."
+  (let ((c (make-canvas)))
+    (setf (canvas-next-id c) 4
+          (canvas-entities c)
+          (list (make-entity :id 1 :type :blob     :pos '(220 180) :scale 1.3 :color :coral   :layer 1000)
+                (make-entity :id 2 :type :squiggle :pos '(400 320) :scale 1.0 :color :teal    :layer 2000)
+                (make-entity :id 3 :type :triangle :pos '(560 200) :scale 0.8 :color :mustard :layer 3000)))
+    c))
+
+(defun reset! (&optional seed)
+  "Reset engine state to a fresh canvas. Optionally re-seed RNGs from SEED."
+  (when seed (seed-rngs! seed))
+  (setf *state* (make-canvas)))
 
 ;;; --- TICK LOOP ---
 
@@ -128,28 +140,7 @@
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."
   (boot!)
-  (let ((mutations (funcall oracle *state* *oracle-rng*)))
+  (let* ((raw (funcall oracle *state* *oracle-rng*))
+         (mutations (stamp-layers raw *jitter-rng*)))
     (setf *state* (apply-mutations *state* mutations))
     mutations))
-
-;;; --- INSPECTION ---
-
-(defun print-entity (e)
-  (format t "  id=~D ~A pos=~A scale=~,2F color=~A~%"
-          (getf e :id) (getf e :type) (getf e :pos)
-          (getf e :scale) (getf e :color)))
-
-(defun print-state (&optional (state *state*))
-  (format t "~&--- ~D entities ---~%" (length (entities state)))
-  (mapc #'print-entity (entities state))
-  (values))
-
-(defun print-tick (n mutations)
-  (format t "~&~%=== tick ~D ===~%mutations: ~S~%" n mutations)
-  (print-state))
-
-(defun demo (&optional (steps 20))
-  "Run STEPS ticks, printing the mutations and resulting state each time."
-  (dotimes (i steps)
-    (print-tick (1+ i) (tick!)))
-  (values))
