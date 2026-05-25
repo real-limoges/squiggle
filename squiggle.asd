@@ -11,4 +11,5 @@
   :components ((:file "squiggle")
                (:file "fake-oracle")
                (:file "llm-oracle")
-               (:file "mutation")))
+               (:file "mutation")
+               (:file "inspect")))
