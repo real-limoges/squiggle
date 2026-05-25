@@ -8,6 +8,31 @@
   :depends-on ()
   :pathname "src/"
   :serial t
-  :components ((:file "squiggle")
+  :components ((:file "package")
+               (:file "types")))
+
+(asdf:defsystem :squiggle/oracle
+  :depends-on (#:squiggle)
+  :pathname "src/oracle"
+  :serial t
+  :components ((:file "oracle")
                (:file "fake-oracle")
-               (:file "mutation")))
+               (:file "llm-oracle")))
+
+(asdf:defsystem :squiggle/backend
+  :depends-on (#:squiggle #:squiggle/oracle)
+  :pathname "src/backend/"
+  :serial t
+  :components ((:file "backend")
+               (:file "mutation")
+               (:file "inspect")))
+
+(asdf:defsystem :squiggle/tests
+  :depends-on (#:fiveam
+               #:squiggle #:squiggle/oracle #:squiggle/backend)
+  :pathname "tests/"
+  :serial t
+  :components ((:file "package")
+               (:file "mutation-tests"))
+  :perform (asdf:test-op (op c)
+              (uiop:symbol-call :fiveam :run! :squiggle)))

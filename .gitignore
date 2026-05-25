@@ -26,6 +26,7 @@ build/
 .cache/
 .slime-history.eli
 .swank.lisp
+quicklisp.lisp
 
 # Qlot
 .qlot/
@@ -41,3 +42,5 @@ qlfile.lock.local
 corpus/
 docs/
 CLAUDE.md
+
+.vscode

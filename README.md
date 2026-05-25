@@ -7,7 +7,28 @@ A self-evolving abstract composition.
 ```
 $ sbcl
 * (require :asdf)
-* (asdf:load-system :squiggle)
-* (in-package :squiggle)
+* (asdf:load-system :squiggle/backend)
+* (in-package :squiggle/backend)
 * (demo)
 ```
+
+## Dev
+
+**Tests**
+```bash
+sbcl --non-interactive \
+     --load ~/quicklisp/setup.lisp \
+     --eval "(push #p\"$(pwd)/\" asdf:*central-registry*)" \
+     --eval '(ql:quickload :squiggle/tests)' \
+     --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run! :squiggle) 0 1))'
+```
+
+**Lint**
+```bash
+sbcl --non-interactive \
+     --load ~/quicklisp/setup.lisp \
+     --eval '(ql:quickload :sblint)' \
+     --eval '(uiop:quit (if (zerop (sblint:run-lint-asd #p"squiggle.asd")) 0 1))'
+```
+
+Or via the `sblint` shell function (defined in `~/.zshrc`) — run it from any CL project root.
