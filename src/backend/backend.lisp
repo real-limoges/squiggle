@@ -1,20 +1,9 @@
-;;;; squiggle.lisp
+;;;; backend.lisp
 ;;;;
 ;;;; A self-evolving abstract composition based on the Jazz design
 
 
-(in-package :squiggle)
-
-;;; --- CONSTANTS ---
-
-(defparameter +palette+ '(:teal :coral :cream :ink :mustard)
-  "The fixed set of colors the composition lives within.")
-
-(defparameter +canvas-w+ 800)
-(defparameter +canvas-h+ 500)
-(defparameter +min-scale+ 0.4)
-(defparameter +max-scale+ 2.5)
-(defparameter +entity-types+ '(:blob :squiggle :triangle :curve))
+(in-package :squiggle/backend)
 
 ;;; --- RNG ---
 
@@ -35,27 +24,9 @@
         *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
 
 
-;;; --- STRUCTS ---
-
-(defstruct entity
-  id type pos scale color layer)
-
-(defstruct canvas
-  (next-id 1)
-  (entities '()))
-
 ;;; --- STATE ---
 
 (defparameter *state* (make-canvas))
-
-;;; --- ACCESSORS ---
-
-(defun entities (state)
-  (canvas-entities state))
-
-(defun find-entity (state id)
-  "Return the entity plist with the given ID, or NIL."
-  (find id (entities state) :key (lambda (e) (entity-id e))))
 
 ;;; --- STATE CONSTRUCTORS ---
 ;;; Every change returns a NEW state — never mutate in place.
@@ -123,13 +94,13 @@
     c))
 
 (defun reset! (&optional seed)
-  "Reset engine state to a fresh canvas. Optionally re-seed RNGs from SEED."
+  "Reset engine state to the seed canvas. Optionally re-seed RNGs from SEED."
   (when seed (seed-rngs! seed))
-  (setf *state* (make-canvas)))
+  (setf *state* (make-seed-canvas)))
 
 ;;; --- TICK LOOP ---
 
-(defun tick! (&optional (oracle #'fake-oracle))
+(defun tick! (&optional (oracle squiggle/oracle:*oracle*))
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."
   (boot!)

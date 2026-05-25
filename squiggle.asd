@@ -5,22 +5,34 @@
   :author "Real Limoges <b.real.limoges@gmail.com>"
   :license "MIT"
   :version "0.1.0"
-  :depends-on (#:dexador #:com.inuoe.jzon)
+  :depends-on ()
   :pathname "src/"
   :serial t
   :components ((:file "package")
-               (:file "squiggle")
-               (:file "mutation")
+               (:file "types")))
+
+(asdf:defsystem :squiggle/oracle
+  :depends-on (#:squiggle)
+  :pathname "src/oracle"
+  :serial t
+  :components ((:file "oracle")
                (:file "fake-oracle")
-               (:file "llm-oracle")
+               (:file "llm-oracle")))
+
+(asdf:defsystem :squiggle/backend
+  :depends-on (#:squiggle #:squiggle/oracle)
+  :pathname "src/backend/"
+  :serial t
+  :components ((:file "backend")
+               (:file "mutation")
                (:file "inspect")))
 
 (asdf:defsystem :squiggle/tests
-  :depends-on (#:squiggle #:fiveam)
+  :depends-on (#:fiveam
+               #:squiggle #:squiggle/oracle #:squiggle/backend)
   :pathname "tests/"
   :serial t
   :components ((:file "package")
-               (:file "squiggle-tests")
                (:file "mutation-tests"))
   :perform (asdf:test-op (op c)
               (uiop:symbol-call :fiveam :run! :squiggle)))

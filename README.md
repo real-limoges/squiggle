@@ -7,8 +7,8 @@ A self-evolving abstract composition.
 ```
 $ sbcl
 * (require :asdf)
-* (asdf:load-system :squiggle)
-* (in-package :squiggle)
+* (asdf:load-system :squiggle/backend)
+* (in-package :squiggle/backend)
 * (demo)
 ```
 

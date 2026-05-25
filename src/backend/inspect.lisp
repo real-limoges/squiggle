@@ -1,8 +1,8 @@
 ;;;; inspect.lisp
 ;;;;
-;;;; Debugging tools
+;;;; Debugging tools for backend
 
-(in-package :squiggle)
+(in-package :squiggle/backend)
 
 (defun print-entity (e)
   (format t "  id=~D ~A pos=~A scale=~,2F color=~A~%"

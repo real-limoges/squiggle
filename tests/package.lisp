@@ -3,7 +3,8 @@
 ;;;; Test package, suite, and shared infrastructure.
 
 (defpackage :squiggle/tests
-  (:use :cl :fiveam :squiggle))
+  (:use :cl :fiveam 
+        :squiggle :squiggle/backend :squiggle/oracle))
 
 (in-package :squiggle/tests)
 

@@ -2,19 +2,9 @@
 ;;;;
 ;;;; This contains the fake oracle for development
 
-(in-package :squiggle)
+(in-package :squiggle/oracle)
 
 ;;; Stands in for the model: returns 1–3 random valid mutations.
-
-(defun random-elt (seq rng)
-  (elt seq (random (length seq) rng)))
-
-(defun random-id (state rng)
-  (getf (random-elt (entities state) rng) :id))
-
-(defun random-delta (rng)
-  "A small offset in [-40, 40]."
-  (- (random 81 rng) 40))
 
 (defun random-factor (rng)
   "A resize factor in [0.8, 1.2]."
@@ -36,3 +26,5 @@
   "Return a list of 1–3 random valid mutations for STATE."
   (loop repeat (1+ (random 3 rng))
         collect (funcall (random-elt *generators* rng) state rng)))
+
+(setf *oracle* #'fake-oracle)

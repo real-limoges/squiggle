@@ -2,7 +2,7 @@
 ;;;;
 ;;;; Mutation verbs — one flat function each, state in / new state out.
 
-(in-package :squiggle)
+(in-package :squiggle/backend)
 
 (defun apply-nudge (state id dx dy)
   "Shift entity ID by (DX, DY). Bounds are the validator's job."
