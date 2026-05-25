@@ -29,6 +29,14 @@ jobs:
                  --eval '(quicklisp-quickstart:install)'
           fi
 
+      - name: Lint
+        run: |
+          sbcl --non-interactive \
+               --load ~/quicklisp/setup.lisp \
+               --eval "(push #p\"$GITHUB_WORKSPACE/\" asdf:*central-registry*)" \
+               --eval '(ql:quickload :sblint)' \
+               --eval '(uiop:quit (if (zerop (sblint:run-lint-asd #p"squiggle.asd")) 0 1))'
+
       - name: Run tests
         run: |
           sbcl --non-interactive \
