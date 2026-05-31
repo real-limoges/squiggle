@@ -5,6 +5,7 @@
 
 (in-package :squiggle/oracle)
 
+
 (defun llm-oracle (state rng)
   "Returns a list of 1-3 random valid mutations. STUB — copies fake-oracle
    until the HTTP client lands."

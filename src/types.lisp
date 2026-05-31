@@ -25,7 +25,6 @@
   (entities '()))
 
 
-
 ;;; --- ACCESSORS ---
 
 (defun entities (state)

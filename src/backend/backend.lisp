@@ -23,7 +23,6 @@
   (setf *oracle-rng* (make-rng main-seed)
         *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
 
-
 ;;; --- STATE ---
 
 (defparameter *state* (make-canvas))
@@ -76,6 +75,36 @@
   "Apply a LIST of mutations in order, threading the state through each."
   (reduce #'apply-mutation mutations :initial-value state))
 
+;;; --- JITTER ---
+
+(defparameter +jitter-nudge-prob+ 0.3)
+(defparameter +jitter-recolor-prob+ 0.05)
+
+(defparameter +jitter-magnitude+ 3)
+
+(defun random-signed (n rng)
+  "Return a random integer in [-N, N] inclusive, drawn from RNG."
+  (- (random (1+ (* 2 n)) rng) n))
+
+(defun make-nudge (entity rng)
+  "Return a :nudge mutation shifting ENTITY by a sub-perceptual random offset."
+  (let ((dx (random-signed +jitter-magnitude+ rng))
+        (dy (random-signed +jitter-magnitude+ rng)))
+    (list :nudge (entity-id entity) dx dy)))
+
+(defun make-recolor (entity rng)
+  "Return a :recolor mutation assigning ENTITY a random color from +PALETTE+."
+  (list :recolor (entity-id entity) (squiggle/oracle:random-elt +palette+ rng)))
+
+(defun jitter-mutations (state rng)
+  "Return a list of sub-perceptual :nudge/:recolor mutations for STATE's entities.
+   Each entity rolls independently for nudge and (separately) for recolor."
+  (loop for e in (entities state)
+          when (< (random 1.0 rng) +jitter-nudge-prob+)
+            collect (make-nudge e rng)
+          when (< (random 1.0 rng) +jitter-recolor-prob+)
+            collect (make-recolor e rng)))
+
 ;;; --- LIFECYCLE ---
 
 (defun boot! ()
@@ -100,11 +129,12 @@
 
 ;;; --- TICK LOOP ---
 
-(defun tick! (&optional (oracle squiggle/oracle:*oracle*))
+(defun tick! (oracle squiggle/oracle:*oracle*)
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."
   (boot!)
   (let* ((raw (funcall oracle *state* *oracle-rng*))
          (mutations (stamp-layers raw *jitter-rng*)))
     (setf *state* (apply-mutations *state* mutations))
+    (setf *state* (apply-mutations *state* (jitter-mutations *state* *jitter-rng*)))
     mutations))
