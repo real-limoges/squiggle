@@ -2,6 +2,8 @@
 
 A self-evolving abstract composition.
 
+Squiggle is a Common Lisp engine for an always-on piece of generative art in the 90s Memphis Group style — blobs, squiggles, triangles, and curves on five fixed colors. A small local LLM reads passages from a book and barfs out words and numbers that the engine turns into shape mutations on a canvas. The book's mood decides how fast the piece moves. Nobody can interact with it. It just sits there forever, slowly redecorating itself.
+
 ## Run
 
 ```

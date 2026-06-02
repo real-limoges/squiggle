@@ -24,7 +24,9 @@
   (next-id 1)
   (entities '()))
 
-
+(defstruct oracle-result
+  (mutations '())
+  mood)
 
 ;;; --- ACCESSORS ---
 
