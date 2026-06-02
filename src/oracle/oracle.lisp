@@ -17,8 +17,7 @@
   "A small offset in [-40, 40]."
   (- (random 81 rng) 40))
 
-(defun use-llm-oracle! ()
-  )
 
-(defun use-fake-oracle! ()
-  )
+(defun use-llm-oracle! () (setf *oracle* #'llm-oracle))
+
+(defun use-fake-oracle! () (setf *oracle* #'fake-oracle))

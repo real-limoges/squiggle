@@ -12,11 +12,12 @@
                (:file "types")))
 
 (asdf:defsystem :squiggle/oracle
-  :depends-on (#:squiggle)
+  :depends-on (#:squiggle #:dexador #:com.inuoe.jzon #:cl-ppcre)
   :pathname "src/oracle"
   :serial t
   :components ((:file "oracle")
                (:file "fake-oracle")
+               (:file "corpus")
                (:file "llm-oracle")))
 
 (asdf:defsystem :squiggle/backend
