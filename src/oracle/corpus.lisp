@@ -1,6 +1,6 @@
 ;;;; corpus.lisp
 ;;;;
-;;;; description
+;;;; main file for intereacting with the book
 
 
 (in-package :squiggle/oracle)

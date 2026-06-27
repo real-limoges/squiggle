@@ -129,7 +129,7 @@
 
 ;;; --- TICK LOOP ---
 
-(defun tick! (oracle squiggle/oracle:*oracle*)
+(defun tick! (oracle)
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."
   (boot!)

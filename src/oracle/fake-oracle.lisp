@@ -4,7 +4,7 @@
 
 (in-package :squiggle/oracle)
 
-;;; Stands in for the model: returns 1–3 random valid mutations.
+;;; Stands in for the model: returns one random valid mutation per call.
 
 (defun random-factor (rng)
   "A resize factor in [0.8, 1.2]."
@@ -23,8 +23,9 @@
   "All mutation generators the fake oracle can draw from.")
 
 (defun fake-oracle (state rng)
-  "Return a list of 1–3 random valid mutations for STATE."
-  (loop repeat (1+ (random 3 rng))
-        collect (funcall (random-elt *generators* rng) state rng)))
+  "Return an oracle-result: one random valid mutation for STATE + a random mood (1–10)."
+  (make-oracle-result
+    :mutations (list (funcall (random-elt *generators* rng) state rng))
+    :mood (1+ (random 10 rng))))
 
 (setf *oracle* #'fake-oracle)

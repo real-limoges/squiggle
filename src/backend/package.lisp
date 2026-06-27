@@ -11,5 +11,6 @@
    :stamp-layers :apply-mutation :apply-mutations
    :with-entities :update-entity
    :apply-nudge :apply-recolor :apply-resize :apply-add :apply-remove
+   :validate-mutation :validate-mutations
    :tick!
    :demo))

@@ -11,6 +11,11 @@
   :components ((:file "package")
                (:file "types")))
 
+(asdf:defsystem :squiggle/web
+  :pathname "src/web"
+  :serial t
+  :components ((:file "package")))
+
 (asdf:defsystem :squiggle/oracle
   :depends-on (#:squiggle #:dexador #:com.inuoe.jzon #:cl-ppcre)
   :pathname "src/oracle"
@@ -28,6 +33,7 @@
   :components ((:file "package")
                (:file "backend")
                (:file "mutation")
+               (:file "validator")
                (:file "inspect")))
 
 (asdf:defsystem :squiggle/tests
@@ -38,4 +44,4 @@
   :components ((:file "package")
                (:file "mutation-tests"))
   :perform (asdf:test-op (op c)
-              (uiop:symbol-call :fiveam :run! :squiggle)))
+                         (uiop:symbol-call :fiveam :run! :squiggle)))
