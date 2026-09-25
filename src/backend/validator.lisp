@@ -13,12 +13,18 @@
     (:nudge     m)
     (:remove    m)
     (:recolor   (when (valid-color? (caddr m)) m))
-    (:add       (destructuring-bind (type x y color) (rest m)
-                  (when (and (valid-type? type) (valid-color? color))
-                    (list :add type 
-                          (clamp x 0 +canvas-w+) 
-                          (clamp y 0 +canvas-h+) 
-                          color))))
+    (:add       (let ((args (rest m)))
+                  ;; Reject, don't signal: a 1.5B model emitting a truncated
+                  ;; (:add :blob 100) is the expected case, and clamp would
+                  ;; itself crash on non-numeric coords (B2).
+                  (when (= (length args) 4)
+                    (destructuring-bind (type x y color) args
+                      (when (and (valid-type? type) (valid-color? color)
+                                 (realp x) (realp y))
+                        (list :add type
+                              (clamp x 0 +canvas-w+)
+                              (clamp y 0 +canvas-h+)
+                              color))))))
     (:resize    m)
     (otherwise  nil)))
 

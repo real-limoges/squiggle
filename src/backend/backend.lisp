@@ -27,6 +27,11 @@
 
 (defparameter *state* (make-canvas))
 
+;; Most recent oracle mood, kept off the oracle-result so the tempo subsystem
+;; (tempo.lisp, B6) can derive the tick rate. tick! records it; nothing reads it
+;; yet until the mood ring and mood->rate mapping land.
+(defparameter *last-mood* nil)
+
 ;;; --- STATE CONSTRUCTORS ---
 ;;; Every change returns a NEW state — never mutate in place.
 
@@ -51,12 +56,17 @@
 ;;; --- DISPATCH ---
 
 (defun stamp-layers (mutations jitter-rng)
-  "Rewrites each :add in MUTATIONS to carry a random :layer drawn from JITTER-RNG"
+  "Rewrites each :add in MUTATIONS to carry a random layer value drawn from
+   JITTER-RNG. The layer is a trailing POSITIONAL argument (Q1), so
+   (:add :blob 100 100 :teal) becomes (:add :blob 100 100 :teal 2727234273793456296),
+   which is exactly apply-add's (state type x y color layer) lambda list.
+   Must run AFTER validate-mutations, whose :add branch destructures the
+   pre-stamp 4-argument form (finding G7)."
   (mapcar (lambda (m)
-          (if (eq (first m) :add)
-              (append m (list :layer (random most-positive-fixnum jitter-rng)))
-              m))
-              mutations))
+            (if (eq (first m) :add)
+                (append m (list (random most-positive-fixnum jitter-rng)))
+                m))
+          mutations))
 
 (defun apply-mutation (state mutation)
   "Apply a single MUTATION s-expression to STATE, returning a new state.
@@ -79,7 +89,6 @@
 
 (defparameter +jitter-nudge-prob+ 0.3)
 (defparameter +jitter-recolor-prob+ 0.05)
-
 (defparameter +jitter-magnitude+ 3)
 
 (defun random-signed (n rng)
@@ -100,10 +109,10 @@
   "Return a list of sub-perceptual :nudge/:recolor mutations for STATE's entities.
    Each entity rolls independently for nudge and (separately) for recolor."
   (loop for e in (entities state)
-          when (< (random 1.0 rng) +jitter-nudge-prob+)
-            collect (make-nudge e rng)
-          when (< (random 1.0 rng) +jitter-recolor-prob+)
-            collect (make-recolor e rng)))
+        when (< (random 1.0 rng) +jitter-nudge-prob+)
+          collect (make-nudge e rng)
+        when (< (random 1.0 rng) +jitter-recolor-prob+)
+          collect (make-recolor e rng)))
 
 ;;; --- LIFECYCLE ---
 
@@ -133,8 +142,10 @@
   "Advance the composition by one step using ORACLE.
    Returns the list of mutations that were applied."
   (boot!)
-  (let* ((raw (funcall oracle *state* *oracle-rng*))
-         (mutations (stamp-layers raw *jitter-rng*)))
+  (let* ((result    (funcall oracle *state* *oracle-rng*))
+         (valid     (validate-mutations (oracle-result-mutations result)))
+         (mutations (stamp-layers valid *jitter-rng*)))
+    (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))
     (setf *state* (apply-mutations *state* (jitter-mutations *state* *jitter-rng*)))
     mutations))
