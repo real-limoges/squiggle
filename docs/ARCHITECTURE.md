@@ -1,6 +1,6 @@
 # Architecture
 
-Map of what's where. Rationale lives in `ROADMAP.md`.
+Map of what's where. Rationale lives in `decisions/`.
 
 ## Layout
 
@@ -14,7 +14,7 @@ squiggle/
 │   │   ├── package.lisp     :squiggle/backend defpackage
 │   │   ├── backend.lisp     RNGs, *state*, dispatch, jitter, lifecycle, tick!
 │   │   ├── mutation.lisp    pure mutation verbs (apply-*)
-│   │   ├── validator.lisp   C2 — validate-mutation/validate-mutations drafted; tick! integration pending
+│   │   ├── validator.lisp   validate-mutation/validate-mutations; wired into tick! (C2)
 │   │   ├── tempo.lisp       mood→tick-rate lookup (E2 — tick-interval stub; not yet in any ASDF system)
 │   │   └── inspect.lisp     REPL tools: print-state, print-tick, demo
 │   └── oracle/
@@ -64,7 +64,7 @@ Planned files are tagged with their `BUILD-PLAN.md` task ID. Untagged files exis
 | `src/backend/backend.lisp` | Two PRNGs (`*oracle-rng*`, `*jitter-rng*`). `seed-rngs!`, `entropy-seed`, `make-rng`. `*state*` defparameter. `with-entities`, `update-entity` state-threading helpers. `stamp-layers` (rewrites `:add` mutations with a `:layer` drawn from `*jitter-rng*`). `apply-mutation` dispatch, `apply-mutations` reducer. Pattern jitter (D1): `jitter-mutations`, `make-nudge`, `make-recolor`, `random-signed`, `+jitter-nudge-prob+` / `+jitter-recolor-prob+` / `+jitter-magnitude+`. `boot!`, `reset!`, `make-seed-canvas` lifecycle. `tick!` loop. |
 | `src/backend/mutation.lisp` | One function per verb: `apply-nudge`, `apply-recolor`, `apply-resize`, `apply-add`, `apply-remove`. Pure: state in, new state out. Validation is the validator's job (C2). |
 | `src/backend/inspect.lisp` | `print-entity`, `print-state`, `print-tick`. `demo` — loads seed canvas, runs N ticks with output. REPL convenience only; not called by the engine. |
-| `src/backend/validator.lisp` *(C2 — validator drafted; tick! stage pending)* | `validate-mutation` / `validate-mutations`: drop only for invalidity (unknown verb, off-palette color, off-vocab type), clamp `:add` coords to canvas bounds rather than reject. Never aesthetic. Both written and exported; `tick!` doesn't call them yet (the remaining C2 step). |
+| `src/backend/validator.lisp` *(C2)* | `validate-mutation` / `validate-mutations`: drop only for invalidity (unknown verb, off-palette color, off-vocab type), clamp `:add` coords to canvas bounds rather than reject. Never aesthetic. Both written and exported; `tick!` calls `validate-mutations` on the oracle-result's mutations before stamping layers. |
 | `src/oracle/corpus.lisp` | `load-passages!` reads `corpus/passages.txt` into the `*passages*` vector; `next-passage!` returns the current passage and advances `*passage-idx*` (wraps at end). Disk-persistence of the pointer still TODO (E1). |
 | `src/backend/tempo.lisp` *(E2/E3 — stub)* | mood→rate lookup (`tick-interval`, re-derived on a ~5-tick cadence from `*last-mood*`; no separate Qwen query — mood rides in each `oracle-result`), mood ring buffer, low-variance → corpus jump. |
 | `loop.lisp` *(F1)* | Thin wrapper: calls `(tick!)` on a timer derived from current mood. The only place that runs forever. |
@@ -117,25 +117,25 @@ Unknown verbs return state unchanged (`apply-mutation` `otherwise` branch).
 ## Tick lifecycle
 
 ```
-tick! [oracle]                          oracle is now a mandatory arg (C3 landed)
+tick! [oracle]                          oracle is a mandatory arg (C3)
   └─ boot!                              seed RNGs from entropy if not yet seeded
-  └─ (oracle *state* *oracle-rng*)      → oracle-result {mutations, mood}  (contract; tick! doesn't unwrap it yet)
-  └─ stamp-layers [*jitter-rng*]        → rewrites :add entries with :layer value
-  └─ apply-mutations → setf *state*     → reduce apply-mutation over stamped list
+  └─ (oracle *state* *oracle-rng*)      → oracle-result {mutations, mood}
+  └─ validate-mutations                 keep only valid (clamped) proposals (C2)
+  └─ stamp-layers [*jitter-rng*]        → rewrites :add entries with a positional :layer value
+  └─ setf *last-mood* ← oracle-result-mood   recorded for the E-series scheduler
+  └─ apply-mutations → setf *state*     → reduce apply-mutation over the stamped list
   └─ jitter-mutations [*jitter-rng*]    → sub-perceptual nudge/recolor, applied (D1)
-  └─ return oracle mutations
+  └─ return applied mutations
 
 Planned additions (build plan):
-  C2 — consume the oracle-result contract: unwrap .mutations (and validate them
-       before stamp-layers), route .mood into *last-mood* for the E-series scheduler.
-       tick! still feeds the oracle return straight in as a bare list today (see gap).
   D2 — heal! guard on entity count after apply-mutations
-  E2/F1 — mood-driven scheduler wrapping tick!
+  E2 — mood→rate lookup filled in and added to the build (tempo.lisp)
+  F1 — mood-driven scheduler wrapping tick!
 ```
 
-`tick!` now takes the oracle as a **mandatory argument** (C3) — it no longer reads `*oracle*` itself. `*oracle*` remains the configured default: set to `#'fake-oracle` by `fake-oracle.lisp` on load, flipped at runtime by `use-llm-oracle!` / `use-fake-oracle!`. The prod loop (F1) and REPL pass it in as `(tick! *oracle*)`; tests pass an oracle directly, e.g. `(tick! #'fake-oracle)`.
+`tick!` takes the oracle as a **mandatory argument** (C3); it does not read `*oracle*` itself. `*oracle*` remains the configured default: set to `#'fake-oracle` by `fake-oracle.lisp` on load, flipped at runtime by `use-llm-oracle!` / `use-fake-oracle!`. The prod loop (F1) and REPL pass it in as `(tick! *oracle*)`; tests pass an oracle directly, e.g. `(tick! #'fake-oracle)`.
 
-**Current gap (`tick!` doesn't consume `oracle-result` yet):** both oracles now return an `oracle-result` — `llm-oracle` parses one, `fake-oracle` wraps one (one mutation + mood). But `tick!` still feeds the oracle's return value straight into `stamp-layers` / `apply-mutations` as if it were a bare mutation *list* — it does not yet unwrap `oracle-result-mutations` or route `oracle-result-mood` into `*last-mood*`. So `(tick! …)` would now hand `stamp-layers` a struct it can't map, and mood routing isn't wired. Wiring `tick!` to consume the contract is the remaining **C2** step (the C3 signature change has landed).
+`tick!` consumes the `oracle-result` contract end to end (C2): it validates `oracle-result-mutations`, stamps positional layers, records `oracle-result-mood` in `*last-mood*`, applies the survivors, and runs the jitter heartbeat. What is not yet built is downstream: `heal!` (D2), the mood-to-rate lookup and the scheduler that reads `*last-mood*` (E2/F1, with `tempo.lisp` still a stub outside the build), and the corpus wiring that keeps `llm-oracle` from silently falling back (B1).
 
 ## External dependencies
 

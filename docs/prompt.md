@@ -37,7 +37,7 @@ Don't explain. Just the score and the words.
 
 ## Parser sketch
 
-Two stages: a pure scan, then an rng-using assembler. (Why split — ROADMAP §7.)
+Two stages: a pure scan, then an rng-using assembler. (Why split — decision 0007.)
 
 **`parse-response (text)` → `parsed` struct.** Pure, lenient, no rng/canvas. From any response:
 
