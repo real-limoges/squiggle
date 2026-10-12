@@ -41,7 +41,7 @@ Two stages: a pure scan, then an rng-using assembler. (Why split — decision 00
 
 **`parse-response (text)` → `parsed` struct.** Pure, lenient, no rng/canvas. From any response:
 
-1. Mood: grep `MOOD=(\d+)`, clamp to 1–10. Missing → `nil` (caller falls back to `*last-mood*`).
+1. Mood: grep `MOOD=(\d+)`, clamp to 1–10. Missing → `nil`. `tick!` writes that `nil` into `*last-mood*` as-is, so the E2 tempo lookup has to supply the default.
 2. Colors: scan for any of the five palette words.
 3. Shapes: scan for any of the four entity-type words.
 4. Numbers: scan for any integers. (Clamping to canvas bounds is the validator's job, C2 — the scan just collects.)

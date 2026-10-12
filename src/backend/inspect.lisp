@@ -22,5 +22,5 @@
   "Load the seed canvas and run STEPS ticks, printing mutations and state each time."
   (setf *state* (make-seed-canvas))
   (dotimes (i steps)
-    (print-tick (1+ i) (tick!)))
+    (print-tick (1+ i) (tick! squiggle/oracle:*oracle*)))
   (values))
