@@ -1,0 +1,188 @@
+# Architecture
+
+A map of what lives where in the Squiggle source tree, as it stands on `main`.
+
+## Layout
+
+```
+squiggle/
+├── squiggle.asd            ASDF system definitions (base + 4 subsystems)
+├── scripts/
+│   └── preprocess-corpus.lisp  offline: corpus/book.txt → corpus/passages.txt
+├── src/
+│   ├── package.lisp        :squiggle base package (shared vocabulary)
+│   ├── types.lisp          constants, structs, canvas helpers  (:squiggle)
+│   ├── backend/
+│   │   ├── package.lisp     :squiggle/backend defpackage
+│   │   ├── backend.lisp     RNGs, *state*, dispatch, jitter, lifecycle, tick!
+│   │   ├── mutation.lisp    pure mutation verbs (apply-*)
+│   │   ├── validator.lisp   validate-mutation/validate-mutations; wired into tick!
+│   │   ├── tempo.lisp       mood→tick-rate lookup (stub; not yet in any ASDF system)
+│   │   └── inspect.lisp     REPL tools: print-state, print-tick, demo
+│   ├── oracle/
+│   │   ├── package.lisp     :squiggle/oracle defpackage (jzon/ppcre nicknames)
+│   │   ├── oracle.lisp      *oracle* defvar, random substrate, oracle toggles
+│   │   ├── fake-oracle.lisp PRNG oracle (dev + test + runtime fallback)
+│   │   ├── corpus.lisp      passage loader + sequential pointer
+│   │   └── llm-oracle.lisp  Qwen oracle: prompt, HTTP, parse, assemble
+│   ├── web/
+│   │   ├── package.lisp     empty (0 bytes); :squiggle/web not yet defined
+│   │   └── server.lisp      bare in-package form; not in any ASDF system
+│   └── frontend/            empty directory
+├── tests/
+│   ├── package.lisp        :squiggle/tests pkg, suite def, deftest-engine macro
+│   └── mutation-tests.lisp unit tests for apply-*
+├── corpus/                 gitignored; local text input
+├── docs/                   gitignored except docs/reference/
+└── .github/workflows/      CI
+```
+
+Files marked *(planned)* in the tables below do not exist yet.
+Everything else exists today.
+
+## ASDF Systems
+
+| System | Depends On | Purpose |
+| --- | --- | --- |
+| `:squiggle` | Nothing | Shared vocabulary: constants, structs, canvas helpers |
+| `:squiggle/oracle` | `:squiggle` | Oracle implementations + random-draw substrate |
+| `:squiggle/backend` | `:squiggle`, `:squiggle/oracle` | Engine: state, mutations, dispatch, lifecycle, tick |
+| `:squiggle/web` | Nothing | Placeholder: lists only the empty `package.lisp`, declares no deps |
+| `:squiggle/tests` | `:squiggle`, `:squiggle/oracle`, `:squiggle/backend` + `fiveam` | Test suite |
+
+## Packages
+
+- **`:squiggle`**: constants (`+palette+`, `+canvas-w+`, `+canvas-h+`, `+entity-types+`, `+min-scale+`, `+max-scale+`), `entity`, `canvas`, and `oracle-result` defstructs and their accessors, `entities`, `find-entity`.
+- **`:squiggle/oracle`**: `*oracle*` defvar, `random-elt`, `random-id`, `random-delta`, `*generators*`, `fake-oracle`, `llm-oracle`, `use-fake-oracle!`, `use-llm-oracle!`, `load-passages!`, `next-passage!`.
+- **`:squiggle/backend`**: `*oracle-rng*`, `*jitter-rng*`, `seed-rngs!`, `*state*`, `boot!`, `reset!`, `make-seed-canvas`, `stamp-layers`, `apply-mutation`, `apply-mutations`, `with-entities`, `update-entity`, all `apply-*` verbs, `validate-mutation`, `validate-mutations`, `tick!`, `demo`. (`*last-mood*` is defined but not exported.)
+- **`:squiggle/tests`**: test package; imports all three packages above plus `fiveam`.
+- **`:squiggle.aesthetic`**: deferred (post-v1).
+
+## Module Responsibilities
+
+| File | Owns |
+| --- | --- |
+| `src/package.lisp` | The base `:squiggle` `defpackage` + exports (shared vocabulary). Subsystem packages live beside their code; see the two rows below. |
+| `src/oracle/package.lisp` | `:squiggle/oracle` `defpackage` + exports, with the `(:jzon …)` / `(:ppcre …)` local nicknames. First component of `:squiggle/oracle` so the nicknames resolve against that system's deps. |
+| `src/backend/package.lisp` | `:squiggle/backend` `defpackage` + exports. |
+| `src/types.lisp` | Palette + canvas/scale/type constants. `entity`, `canvas`, and `oracle-result` `defstruct` definitions. `entities` and `find-entity` accessors. (`oracle-result` = `{mutations, mood}`, the shared oracle→engine return contract; it lives here because both oracles produce it and `tick!` consumes it.) |
+| `src/oracle/oracle.lisp` | `*oracle*` defvar (defaults to `nil`; set to `#'fake-oracle` by `fake-oracle.lisp` on load). `use-llm-oracle!` / `use-fake-oracle!` flip `*oracle*` at runtime. `random-elt`, `random-id`, `random-delta`: shared random-draw helpers used by both oracle impls. |
+| `src/oracle/fake-oracle.lisp` | Per-verb generators (`gen-nudge`, `gen-recolor`, `gen-resize`, `gen-add`, `gen-remove`). `*generators*` list. `fake-oracle` function: returns an `oracle-result` (one mutation per call + a random mood 1–10 from `*oracle-rng*`); one-mutation-per-call mirrors the LLM oracle so swapping oracles doesn't change per-tick density. Sets `*oracle*` to `#'fake-oracle` on load. |
+| `src/oracle/llm-oracle.lisp` | `llm-oracle`: same `(state rng)` signature, returns an `oracle-result`, and `handler-case` falls back to `fake-oracle` on any error or empty parse. `*prompt-template*` defparameter; `build-prompt`; `json-object` helper; `call-ollama` (dexador→Ollama, jzon decode); pure scanners `scan-mood` (ppcre `MOOD=(\d+)`) / `scan-keywords` / `scan-numbers`; `parse-response (text)` → internal `parsed` struct; `assemble-mutations (parsed state rng)`: `cond` random-draw, one mutation per call (priority add > recolor > nudge). The `parsed` struct (Qwen token bags) is defined here and never leaves this file. |
+| `src/backend/backend.lisp` | Two PRNGs (`*oracle-rng*`, `*jitter-rng*`). `seed-rngs!`, `entropy-seed`, `make-rng`. `*state*` defparameter. `*last-mood*` (mood of the latest `oracle-result`, written by `tick!`, read by nothing yet). `with-entities`, `update-entity` state-threading helpers. `stamp-layers` (rewrites `:add` mutations with a `:layer` drawn from `*jitter-rng*`). `apply-mutation` dispatch, `apply-mutations` reducer. Pattern jitter: `jitter-mutations`, `make-nudge`, `make-recolor`, `random-signed`, `+jitter-nudge-prob+` / `+jitter-recolor-prob+` / `+jitter-magnitude+`. `boot!`, `reset!`, `make-seed-canvas` lifecycle. `tick!` loop. |
+| `src/backend/mutation.lisp` | One function per verb: `apply-nudge`, `apply-recolor`, `apply-resize`, `apply-add`, `apply-remove`. Pure: state in, new state out. Validation is the validator's job. |
+| `src/backend/inspect.lisp` | `print-entity`, `print-state`, `print-tick`. `demo` loads the seed canvas and runs N ticks with output. REPL convenience only; not called by the engine. Ticks with `*oracle*`. |
+| `src/backend/validator.lisp` | `validate-mutation` / `validate-mutations`: drop only for invalidity (unknown verb, off-palette color, off-vocab type), clamp `:add` coords to canvas bounds rather than reject. Never aesthetic. Both written and exported; `tick!` calls `validate-mutations` on the oracle-result's mutations before stamping layers. |
+| `src/oracle/corpus.lisp` | `load-passages!` reads `corpus/passages.txt` into the `*passages*` vector; `next-passage!` returns the current passage and advances `*passage-idx*` (wraps at end). The pointer is not yet persisted to disk. |
+| `src/backend/tempo.lisp` *(stub)* | Mood→rate lookup (`tick-interval`, re-derived on a ~5-tick cadence from `*last-mood*`; no separate Qwen query, since mood rides in each `oracle-result`), mood ring buffer, low-variance → corpus jump. |
+| `loop.lisp` *(planned)* | Thin wrapper: calls `(tick! *oracle*)` on a timer derived from current mood. The only place that runs forever. |
+| `src/web/server.lisp` *(planned)* | Hunchentoot server: `/`, `/about`, `/events` (SSE). File exists as a bare `in-package` form. |
+| `src/web/svg.lisp` *(planned)* | Pure `state → svg-string`, z-ordered by `:layer`. |
+| `log.lisp` *(planned)* | SQLite append-only log of applied mutations (post-validator, post-jitter). |
+| `debug-page.lisp` *(planned)* | `/debug` HTML: sparklines for entity count, mutations/tick, mood timeline, corpus pointer. |
+| `tests/` | Today: two unit tests (`nudge-moves-entity`, `recolor-entity`); nothing calls `tick!`. Planned: property tests on the pure mutation layer and mock-Qwen adversarial tests. Fake oracle only. |
+
+## State Shape
+
+```lisp
+;; canvas struct  (make-canvas / copy-canvas)
+(canvas-next-id  state)   ; integer: monotonically assigned by apply-add; oracle never picks ids
+(canvas-entities state)   ; list of entity structs, ordered by insertion
+
+;; entity struct  (make-entity / copy-entity)
+(entity-id    e)   ; integer
+(entity-type  e)   ; keyword: member of +entity-types+
+(entity-pos   e)   ; (x y) list
+(entity-scale e)   ; float
+(entity-color e)   ; keyword: member of +palette+
+(entity-layer e)   ; integer: assigned at add time by stamp-layers; never mutated
+
+;; oracle-result struct  (make-oracle-result / copy-oracle-result)
+(oracle-result-mutations r)   ; list of raw mutation s-exprs (validated later, in tick!)
+(oracle-result-mood      r)   ; integer 1–10, or NIL
+```
+
+Every oracle returns an `oracle-result`.
+The `parsed` struct (Qwen's scanned token bags: mood + colors/shapes/numbers) is an llm-oracle implementation detail and does **not** appear here; it's consumed by `assemble-mutations` before `llm-oracle` returns.
+
+`*state*` is the single live composition, rebound (never mutated in place) each tick.
+
+Layer render contract: sort entities ascending by `:layer`; tiebreak by `:id`.
+Higher layer paints on top.
+
+## Mutation Verbs
+
+| Verb | Args | Effect |
+| --- | --- | --- |
+| `:nudge`   | `id dx dy`           | Shift position |
+| `:recolor` | `id color`           | Set color |
+| `:resize`  | `id factor`          | Multiply scale |
+| `:add`     | `type x y color layer` | Append new entity, assign id |
+| `:remove`  | `id`                 | Drop entity |
+
+Unknown verbs return state unchanged (`apply-mutation` `otherwise` branch).
+
+`:layer` in `:add` is injected by `stamp-layers` (called in `tick!`); oracles never set it.
+
+## Tick Lifecycle
+
+```
+tick! [oracle]                          oracle is a mandatory arg
+  └─ boot!                              seed RNGs from entropy if not yet seeded
+  └─ (oracle *state* *oracle-rng*)      → oracle-result {mutations, mood}
+  └─ validate-mutations                 keep only valid (clamped) proposals
+  └─ stamp-layers [*jitter-rng*]        → rewrites :add entries with a positional :layer value
+  └─ setf *last-mood* ← oracle-result-mood   recorded for the future scheduler
+  └─ apply-mutations → setf *state*     → reduce apply-mutation over the stamped list
+  └─ jitter-mutations [*jitter-rng*]    → sub-perceptual nudge/recolor, applied
+  └─ return applied mutations
+
+Planned additions:
+  heal! guard on entity count after apply-mutations
+  mood→rate lookup filled in and added to the build (tempo.lisp)
+  mood-driven scheduler wrapping tick!
+```
+
+`tick!` takes the oracle as a **mandatory argument**; it does not read `*oracle*` itself.
+`*oracle*` remains the configured default: set to `#'fake-oracle` by `fake-oracle.lisp` on load, flipped at runtime by `use-llm-oracle!` / `use-fake-oracle!`.
+The prod loop and the REPL pass it in as `(tick! *oracle*)`; tests pass an oracle directly, e.g. `(tick! #'fake-oracle)`.
+
+`tick!` consumes the `oracle-result` contract end to end: it validates `oracle-result-mutations`, stamps positional layers, records `oracle-result-mood` in `*last-mood*`, applies the survivors, and runs the jitter heartbeat.
+What is not yet built is downstream: `heal!`, the mood-to-rate lookup and the scheduler that reads `*last-mood*` (with `tempo.lisp` still a stub outside the build), and the corpus wiring that keeps `llm-oracle` from silently falling back to the fake oracle.
+
+## External Dependencies
+
+ASDF `:depends-on` (current):
+
+- `fiveam`: test framework (`:squiggle/tests` only)
+- `dexador`: HTTP client for Ollama (`:squiggle/oracle`)
+- `com.inuoe.jzon`: JSON encode/decode for Ollama bodies + responses (`:squiggle/oracle`)
+- `cl-ppcre`: regex for Qwen response parsing (`:squiggle/oracle`)
+
+All three HTTP/JSON/regex deps are scoped to `:squiggle/oracle` (not core `:squiggle`), so the engine stays dependency-free.
+They are referenced via dexador's built-in `dex:` nickname and the `(:jzon :com.inuoe.jzon)` / `(:ppcre :cl-ppcre)` package-local nicknames on the `:squiggle/oracle` `defpackage`.
+That `defpackage` lives in `src/oracle/package.lisp` (not the base `src/package.lisp`) precisely so the nicknames resolve against deps the `:squiggle/oracle` system loads, keeping the base `:squiggle` system dependency-free.
+
+System Lisp: SBCL via Quicklisp.
+
+## Build and Run
+
+```lisp
+$ sbcl --load ~/quicklisp/setup.lisp
+* (push #p"/path/to/squiggle/" asdf:*central-registry*)
+* (ql:quickload :squiggle/backend)
+* (in-package :squiggle/backend)
+* (reset! 42)                         ; required first: an empty canvas crashes the fake oracle
+* (tick! squiggle/oracle:*oracle*)    ; one step; returns the applied mutations
+* (demo)                              ; or: seed canvas + 20 ticks with printed output
+```
+
+Run tests from the REPL with `(asdf:test-system :squiggle/tests)`, which the `.asd` `:perform` maps to `(fiveam:run! :squiggle)`, or from the shell:
+
+```bash
+sbcl --non-interactive \
+     --load ~/quicklisp/setup.lisp \
+     --eval "(push #p\"$(pwd)/\" asdf:*central-registry*)" \
+     --eval '(ql:quickload :squiggle/tests)' \
+     --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run! :squiggle) 0 1))'
+```

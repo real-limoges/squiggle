@@ -40,10 +40,11 @@ qlfile.lock.local
 
 # Project-specific
 corpus/
-docs/
 CLAUDE.md
 
 .vscode
 
-# working notes and drafts; see docs/private-notes/README.md
-docs/private-notes/
+# docs/ is private: decisions, audits, deliverables, notes, state.yaml, html
+docs/*
+# except reference/: external sources and architecture diagrams
+!docs/reference/

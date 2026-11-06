@@ -24,7 +24,9 @@ Where:
 Example: \"MOOD=8 coral squiggle 340 teal blob 120 triangle 600 mustard\"
 
 Don't explain. Just the score and the words."
-  "Qwen prompt template; ~A = corpus passage. Rationale lives in docs/prompt.md.")
+  "Qwen prompt template; ~A = corpus passage. The passage carries no canvas
+state: the reply's MOOD=N prefix sets tempo, and its words and numbers seed
+mutations that assemble-mutations draws from.")
 
 (defstruct parsed mood colors shapes numbers)
 
