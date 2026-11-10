@@ -1,21 +1,13 @@
-;;;; types.lisp
-;;;;
-;;;; Shared components for Squiggle
+;;;; types.lisp: constants and structs shared by the engine and the oracles
 
 (in-package :squiggle)
 
-(defparameter +palette+ '(:teal :coral :cream :ink :mustard)
-  "The fixed set of colors the composition lives within.")
-
-;;; --- CONSTANTS ---
-
+(defparameter +palette+ '(:teal :coral :cream :ink :mustard))
 (defparameter +canvas-w+ 800)
 (defparameter +canvas-h+ 500)
 (defparameter +min-scale+ 0.4)
 (defparameter +max-scale+ 2.5)
 (defparameter +entity-types+ '(:blob :squiggle :triangle :curve))
-
-;;; --- STRUCTS ---
 
 (defstruct entity
   id type pos scale color layer)
@@ -28,11 +20,8 @@
   (mutations '())
   mood)
 
-;;; --- ACCESSORS ---
-
 (defun entities (state)
   (canvas-entities state))
 
 (defun find-entity (state id)
-  "Return the entity plist with the given ID, or NIL."
   (find id (entities state) :key (lambda (e) (entity-id e))))

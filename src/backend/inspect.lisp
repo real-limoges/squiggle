@@ -1,6 +1,4 @@
-;;;; inspect.lisp
-;;;;
-;;;; Debugging tools for backend
+;;;; inspect.lisp: REPL printers
 
 (in-package :squiggle/backend)
 
@@ -19,7 +17,6 @@
   (print-state))
 
 (defun demo (&optional (steps 20))
-  "Load the seed canvas and run STEPS ticks, printing mutations and state each time."
   (setf *state* (make-seed-canvas))
   (dotimes (i steps)
     (print-tick (1+ i) (tick! squiggle/oracle:*oracle*)))

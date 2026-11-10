@@ -1,6 +1,4 @@
 ;;;; mutation-tests.lisp
-;;;;
-;;;; Tests for src/mutation.lisp
 
 (in-package :squiggle/tests)
 

@@ -1,7 +1,4 @@
-;;;; corpus.lisp
-;;;;
-;;;; main file for intereacting with the book
-
+;;;; corpus.lisp: walks the book one passage at a time
 
 (in-package :squiggle/oracle)
 
@@ -13,6 +10,6 @@
         *passage-idx* 0))
 
 (defun next-passage! ()
-  "Return the next corpus passage, advancing the pointer"
+  "Wraps to the start at the end of the book."
   (prog1 (aref *passages* *passage-idx*)
     (setf *passage-idx* (mod (1+ *passage-idx*) (length *passages*)))))

@@ -1,12 +1,10 @@
-;;;; package.lisp
-;;;;
-;;;; :squiggle/backend — engine: state, mutations, dispatch, lifecycle, tick.
+;;;; package.lisp: the engine (state, mutations, validation, tick)
 
 (defpackage :squiggle/backend
   (:use :cl :squiggle)
   (:export
    :*oracle-rng* :*jitter-rng* :seed-rngs!
-   :*state*
+   :*state* :*tick-observers*
    :boot! :reset! :make-seed-canvas
    :stamp-layers :apply-mutation :apply-mutations
    :with-entities :update-entity

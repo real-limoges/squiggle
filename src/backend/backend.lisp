@@ -1,50 +1,41 @@
-;;;; backend.lisp
-;;;;
-;;;; A self-evolving abstract composition based on the Jazz design
-
+;;;; backend.lisp: engine state and the tick loop
+;;;; Every change builds a new canvas; nothing mutates one in place.
 
 (in-package :squiggle/backend)
 
-;;; --- RNG ---
+;;; RNG
 
 (defvar *oracle-rng* nil)
 (defvar *jitter-rng* nil)
 
 (defun entropy-seed ()
-  "Return a fresh integer seed from OS entropy"
   (random most-positive-fixnum (make-random-state t)))
 
 (defun make-rng (seed)
-  "Return a fresh random-state seeded deterministically from SEED"
   (sb-ext:seed-random-state seed))
 
 (defun seed-rngs! (main-seed)
-  "Derive both engine RNGs from MAIN-SEED. Used by tests."
   (setf *oracle-rng* (make-rng main-seed)
         *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
 
-;;; --- STATE ---
+;;; State
 
 (defparameter *state* (make-canvas))
 
-;; Most recent oracle mood, kept off the oracle-result so the tempo subsystem
-;; (tempo.lisp, B6) can derive the tick rate. tick! records it; nothing reads it
-;; yet until the mood ring and mood->rate mapping land.
+(defvar *tick-observers* '()
+  "Functions called as (fn state mutations) after each tick commits")
+
+;; Recorded by tick! for the tempo subsystem; nothing reads it yet.
 (defparameter *last-mood* nil)
 
-;;; --- STATE CONSTRUCTORS ---
-;;; Every change returns a NEW state — never mutate in place.
-
 (defun with-entities (state new-entities)
-  "Return a copy of STATE whose entity list is NEW-ENTITIES."
   (let ((copy (copy-canvas state)))
     (setf (canvas-entities copy) new-entities)
     copy))
 
 (defun update-entity (state id fn)
-  "Return a new state where entity ID has been replaced by (FN entity).
-   If ID doesn't exist, return STATE unchanged. This single helper absorbs
-   the find/copy/replace pattern that every modifying verb used to repeat."
+  "Replace entity ID with (FN copy-of-entity). STATE comes back unchanged if ID
+is missing."
   (if (null (find-entity state id))
       state
       (with-entities
@@ -53,15 +44,11 @@
                   (if (= (entity-id e) id) (funcall fn (copy-entity e)) e))
                 (entities state)))))
 
-;;; --- DISPATCH ---
+;;; Dispatch
 
 (defun stamp-layers (mutations jitter-rng)
-  "Rewrites each :add in MUTATIONS to carry a random layer value drawn from
-   JITTER-RNG. The layer is a trailing POSITIONAL argument (Q1), so
-   (:add :blob 100 100 :teal) becomes (:add :blob 100 100 :teal 2727234273793456296),
-   which is exactly apply-add's (state type x y color layer) lambda list.
-   Must run AFTER validate-mutations, whose :add branch destructures the
-   pre-stamp 4-argument form (finding G7)."
+  "Append a random layer to each :add, giving apply-add its LAYER argument.
+Runs after validation, which expects the unstamped four-argument :add."
   (mapcar (lambda (m)
             (if (eq (first m) :add)
                 (append m (list (random most-positive-fixnum jitter-rng)))
@@ -69,8 +56,6 @@
           mutations))
 
 (defun apply-mutation (state mutation)
-  "Apply a single MUTATION s-expression to STATE, returning a new state.
-   Unknown verbs are ignored."
   (let ((op (first mutation))
         (args (rest mutation)))
     (case op
@@ -82,47 +67,41 @@
       (otherwise state))))
 
 (defun apply-mutations (state mutations)
-  "Apply a LIST of mutations in order, threading the state through each."
   (reduce #'apply-mutation mutations :initial-value state))
 
-;;; --- JITTER ---
+;;; Jitter: sub-perceptual drift so the canvas is never still
 
 (defparameter +jitter-nudge-prob+ 0.3)
 (defparameter +jitter-recolor-prob+ 0.05)
 (defparameter +jitter-magnitude+ 3)
 
 (defun random-signed (n rng)
-  "Return a random integer in [-N, N] inclusive, drawn from RNG."
+  "An integer in [-N, N]."
   (- (random (1+ (* 2 n)) rng) n))
 
 (defun make-nudge (entity rng)
-  "Return a :nudge mutation shifting ENTITY by a sub-perceptual random offset."
   (let ((dx (random-signed +jitter-magnitude+ rng))
         (dy (random-signed +jitter-magnitude+ rng)))
     (list :nudge (entity-id entity) dx dy)))
 
 (defun make-recolor (entity rng)
-  "Return a :recolor mutation assigning ENTITY a random color from +PALETTE+."
   (list :recolor (entity-id entity) (squiggle/oracle:random-elt +palette+ rng)))
 
 (defun jitter-mutations (state rng)
-  "Return a list of sub-perceptual :nudge/:recolor mutations for STATE's entities.
-   Each entity rolls independently for nudge and (separately) for recolor."
+  "Each entity rolls separately for a nudge and a recolor."
   (loop for e in (entities state)
         when (< (random 1.0 rng) +jitter-nudge-prob+)
           collect (make-nudge e rng)
         when (< (random 1.0 rng) +jitter-recolor-prob+)
           collect (make-recolor e rng)))
 
-;;; --- LIFECYCLE ---
+;;; Lifecycle
 
 (defun boot! ()
-  "Seed RNGs from OS Entropy if they aren't seeded yet. Idempotent"
   (unless *oracle-rng*
     (seed-rngs! (entropy-seed))))
 
 (defun make-seed-canvas ()
-  "Return a fixed REPL-friendly starting composition with hardcoded layers."
   (let ((c (make-canvas)))
     (setf (canvas-next-id c) 4
           (canvas-entities c)
@@ -132,15 +111,14 @@
     c))
 
 (defun reset! (&optional seed)
-  "Reset engine state to the seed canvas. Optionally re-seed RNGs from SEED."
+  "For the REPL and tests only; the running piece never resets."
   (when seed (seed-rngs! seed))
   (setf *state* (make-seed-canvas)))
 
-;;; --- TICK LOOP ---
+;;; Tick
 
 (defun tick! (oracle)
-  "Advance the composition by one step using ORACLE.
-   Returns the list of mutations that were applied."
+  "Returns the oracle's mutations as applied (jitter not included)."
   (boot!)
   (let* ((result    (funcall oracle *state* *oracle-rng*))
          (valid     (validate-mutations (oracle-result-mutations result)))
@@ -148,4 +126,6 @@
     (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))
     (setf *state* (apply-mutations *state* (jitter-mutations *state* *jitter-rng*)))
+    (dolist (observe *tick-observers*)
+      (funcall observe *state* mutation))
     mutations))

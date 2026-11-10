@@ -1,8 +1,6 @@
-;;;; package.lisp
-;;;;
-;;;; :squiggle/oracle — oracle implementations and shared random-draw substrate.
-;;;; Defined here (not in the base package file) so its jzon/ppcre nicknames
-;;;; resolve against deps loaded by the :squiggle/oracle system.
+;;;; package.lisp: the oracles and the random draws they share
+;;;; Kept out of the base package so the jzon and ppcre nicknames resolve
+;;;; against deps the :squiggle/oracle system loads.
 
 (defpackage :squiggle/oracle
   (:use :cl :squiggle)

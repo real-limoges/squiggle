@@ -78,6 +78,7 @@ Everything else exists today.
 | `loop.lisp` *(planned)* | Thin wrapper: calls `(tick! *oracle*)` on a timer derived from current mood. The only place that runs forever. |
 | `src/web/server.lisp` *(planned)* | Hunchentoot server: `/`, `/about`, `/events` (SSE). File exists as a bare `in-package` form. |
 | `src/web/svg.lisp` *(planned)* | Pure `state → svg-string`, z-ordered by `:layer`. |
+| `src/web/page.lisp` *(planned)* | The canvas and about pages as pure functions returning HTML; the canvas page carries the `EventSource` client and the CSS crossfade. |
 | `log.lisp` *(planned)* | SQLite append-only log of applied mutations (post-validator, post-jitter). |
 | `debug-page.lisp` *(planned)* | `/debug` HTML: sparklines for entity count, mutations/tick, mood timeline, corpus pointer. |
 | `tests/` | Today: two unit tests (`nudge-moves-entity`, `recolor-entity`); nothing calls `tick!`. Planned: property tests on the pure mutation layer and mock-Qwen adversarial tests. Fake oracle only. |

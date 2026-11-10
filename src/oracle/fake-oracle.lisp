@@ -1,10 +1,8 @@
-;;;; fake-oracle.lisp
-;;;;
-;;;; This contains the fake oracle for development
+;;;; fake-oracle.lisp: one random valid mutation per call
+;;;; A peer to the LLM oracle, not a stub: tests, the REPL and the LLM oracle's
+;;;; fallback all run it.
 
 (in-package :squiggle/oracle)
-
-;;; Stands in for the model: returns one random valid mutation per call.
 
 (defun random-factor (rng)
   "A resize factor in [0.8, 1.2]."
@@ -19,11 +17,9 @@
 (defun gen-remove  (state rng) (list :remove (random-id state rng)))
 
 (defparameter *generators*
-  (list #'gen-nudge #'gen-recolor #'gen-resize #'gen-add #'gen-remove)
-  "All mutation generators the fake oracle can draw from.")
+  (list #'gen-nudge #'gen-recolor #'gen-resize #'gen-add #'gen-remove))
 
 (defun fake-oracle (state rng)
-  "Return an oracle-result: one random valid mutation for STATE + a random mood (1–10)."
   (make-oracle-result
     :mutations (list (funcall (random-elt *generators* rng) state rng))
     :mood (1+ (random 10 rng))))
