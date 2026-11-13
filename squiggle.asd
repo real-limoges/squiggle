@@ -49,6 +49,7 @@
   :pathname "tests/"
   :serial t
   :components ((:file "package")
-               (:file "mutation-tests"))
+               (:file "mutation-tests")
+               (:file "web-tests"))
   :perform (asdf:test-op (op c)
                          (uiop:symbol-call :fiveam :run! :squiggle)))

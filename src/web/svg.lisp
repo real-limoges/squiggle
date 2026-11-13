@@ -29,7 +29,7 @@
   "Return STATE as a line of SVG markup, entities painted back to front"
   (with-html-output-to-string (s)
     (:svg :xmlns "http://www.w3.org/2000/svg"
-          :viewbox (format nil "0 0 ~D ~D" +canvas-w+ +canvas-h+)
+          :|viewBox| (format nil "0 0 ~D ~D" +canvas-w+ +canvas-h+)
           (dolist (e (paint-order state))
             (let ((side (round (* +base-size+ (entity-scale e)))))
               (htm (:rect :x (round (first (entity-pos e)))

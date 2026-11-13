@@ -1,5 +1,5 @@
 ;;;; validator.lisp: drops oracle proposals the engine cannot apply
-;;;; Validity only, never taste.
+;;;; Validity only, they can be ugly as hell
 
 (in-package :squiggle/backend)
 

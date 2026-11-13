@@ -3,7 +3,7 @@
 
 (in-package :squiggle/backend)
 
-;;; RNG
+;;; --- RNG ---
 
 (defvar *oracle-rng* nil)
 (defvar *jitter-rng* nil)
@@ -18,7 +18,7 @@
   (setf *oracle-rng* (make-rng main-seed)
         *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
 
-;;; State
+;;; --- State ---
 
 (defparameter *state* (make-canvas))
 
@@ -44,7 +44,7 @@ is missing."
                   (if (= (entity-id e) id) (funcall fn (copy-entity e)) e))
                 (entities state)))))
 
-;;; Dispatch
+;;; --- Dispatch ---
 
 (defun stamp-layers (mutations jitter-rng)
   "Append a random layer to each :add, giving apply-add its LAYER argument.
@@ -69,7 +69,8 @@ Runs after validation, which expects the unstamped four-argument :add."
 (defun apply-mutations (state mutations)
   (reduce #'apply-mutation mutations :initial-value state))
 
-;;; Jitter: sub-perceptual drift so the canvas is never still
+;;; --- Jitter ---
+;;; Sub-perceptual drift so the canvas is never still
 
 (defparameter +jitter-nudge-prob+ 0.3)
 (defparameter +jitter-recolor-prob+ 0.05)
@@ -95,7 +96,7 @@ Runs after validation, which expects the unstamped four-argument :add."
         when (< (random 1.0 rng) +jitter-recolor-prob+)
           collect (make-recolor e rng)))
 
-;;; Lifecycle
+;;; --- Lifecycle ---
 
 (defun boot! ()
   (unless *oracle-rng*
@@ -115,7 +116,7 @@ Runs after validation, which expects the unstamped four-argument :add."
   (when seed (seed-rngs! seed))
   (setf *state* (make-seed-canvas)))
 
-;;; Tick
+;;; --- Tick ---
 
 (defun tick! (oracle)
   "Returns the oracle's mutations as applied (jitter not included)."
@@ -127,5 +128,5 @@ Runs after validation, which expects the unstamped four-argument :add."
     (setf *state* (apply-mutations *state* mutations))
     (setf *state* (apply-mutations *state* (jitter-mutations *state* *jitter-rng*)))
     (dolist (observe *tick-observers*)
-      (funcall observe *state* mutation))
+      (funcall observe *state* mutations))
     mutations))

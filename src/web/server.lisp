@@ -6,10 +6,10 @@
 
 
 (defvar *acceptor* nil
-  "The running acceptor or NIL if its stopped")
+  "The running acceptor or NIL if it's stopped")
 
 (defvar *frame* ""
-  "The SVG of the last commited tick. Handlers can read this
+  "The SVG of the last committed tick. Handlers can read this
 but never *STATE*")
 
 (defvar *viewers* '()
@@ -28,7 +28,7 @@ but never *STATE*")
   (concatenate 'string "data: " svg))
 
 (defun write-sse (stream line)
-  "Write LINE to the blank link that ends an SSE record.
+  "Write LINE and the blank line that ends an SSE record.
 NIL if the viewer has gone"
   (handler-case (progn (write-string line stream)
                        (terpri stream)
@@ -38,11 +38,11 @@ NIL if the viewer has gone"
     (error () nil)))
 
 (defun send-to-viewer! (stream line)
-  "Write LINE to STREAM under lock. Drop the viewr if the write fails.
-Rturn T while the viewer is still connected"
+  "Write LINE to STREAM under lock. Drop the viewer if the write fails.
+Return T while the viewer is still connected"
   (bt:with-lock-held (*viewers-lock*)
     (cond ((not (member stream *viewers*)) nil)
-          ((write-see stream line) t)
+          ((write-sse stream line) t)
           (t (setf *viewers* (remove stream *viewers*))
              nil))))
 
@@ -53,7 +53,7 @@ Rturn T while the viewer is still connected"
       (send-to-viewer! stream (frame-line svg)))))
 
 (defun publish-frame (state mutations)
-  "Tick observer that renders the committed STATE once and broadcast it"
+  "Tick observer that renders the committed STATE once and broadcasts it"
   (declare (ignore mutations))
   (let ((svg (render-svg state)))
     (setf *frame* svg)
@@ -69,13 +69,13 @@ Rturn T while the viewer is still connected"
                                         :external-format :utf-8)))
     (bt:with-lock-held (*viewers-lock*)
       (push stream *viewers*))
-    (send-to-viewer! strema (frame-line *frame*))
-    (loop do (sleep +pint-seconds+)
+    (send-to-viewer! stream (frame-line *frame*))
+    (loop do (sleep +ping-seconds+)
           while (send-to-viewer! stream ": ping"))
     nil))
 
 (defclass squiggle-acceptor (hunchentoot:acceptor) ()
-  (:documentation "Acceptor that servers the canvas, about page, and /events"))
+  (:documentation "Acceptor that serves the canvas, about page, and /events"))
 
 (defmethod hunchentoot:acceptor-dispatch-request ((acceptor squiggle-acceptor) request)
   (let ((path (hunchentoot:script-name request)))

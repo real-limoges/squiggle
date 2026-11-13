@@ -7,7 +7,7 @@
   (make-canvas :entities entities :next-id (1+ (length entities))))
 
 (defun fill-position (svg hex)
-  (search (format nil "fill='~A" hex) svg))
+  (search (format nil "fill='~A'" hex) svg))
 
 (defun count-matches (needle haystack)
   (loop with start = 0
@@ -28,19 +28,24 @@
 (deftest-engine svg-orders-by-layer-not-id
     (let ((svg (render-svg
                 (canvas-of
-                 (make-entity :id 1 :type blob :pos '(0 0) :scale 1 :color :ink :layer 9000)
-                 (make-entity :id 2 :type blob :pos '(0 0) :scale 1 :color :teal :layer 10)))))
+                 (make-entity :id 1 :type :blob :pos '(0 0) :scale 1 :color :ink :layer 9000)
+                 (make-entity :id 2 :type :blob :pos '(0 0) :scale 1 :color :teal :layer 10)))))
       (is (< (fill-position svg "#1fa7a0") (fill-position svg "#1d1d2b")))))
 
 (deftest-engine svg-breaks-layer-ties-by-id
     (let ((svg (render-svg
                 (canvas-of
-                 (make-entity :id 2 :type blob :pos '(0 0) :scale 1 :color :ink :layer 5)
-                 (make-entity :id 1 :type blob :pos '(0 0) :scale 1 :color :teal :layer 5)))))
-      (is (< (fill-position svg #1fa7a0) (fill-position svg "#1d1d2b")))))
+                 (make-entity :id 2 :type :blob :pos '(0 0) :scale 1 :color :ink :layer 5)
+                 (make-entity :id 1 :type :blob :pos '(0 0) :scale 1 :color :teal :layer 5)))))
+      (is (< (fill-position svg "#1fa7a0") (fill-position svg "#1d1d2b")))))
 
 (deftest-engine svg-is-one-line
     (is (null (find #\Newline (render-svg *state*)))))
+
+(deftest-engine svg-spells-viewbox-in-camel-case
+    (let ((svg (render-svg *state*)))
+      (is (search "viewBox='0 0 800 500'" svg))
+      (is (null (search "viewbox" svg)))))
 
 (deftest-engine svg-leaves-state-alone
     (let ((before (mapcar #'entity-id (entities *state*))))
@@ -49,4 +54,4 @@
 
 (deftest-engine canvas-page-embeds-the-frame
     (let ((svg (render-svg *state*)))
-      (is (search svg (cnavas-page svg)))))
+      (is (search svg (canvas-page svg)))))
