@@ -18,22 +18,30 @@
       (and (= (entity-layer a) (entity-layer b))
            (< (entity-id a) (entity-id b)))))
 
-(defun paint-order (state)
-  "STATE's entities back to front. A fresh list and STATE is untouched"
-  (sort (copy-list (entities state)) #'paint-order-p))
+(defun paint-order (canvas)
+  "CANVAS's entities back to front. A fresh list and CANVAS is untouched"
+  (sort (copy-list (entities canvas)) #'paint-order-p))
 
 (defun fill-hex (color)
-  (getf +palette-hex+ color))
+  "Signals on a color outside the palette"
+  (or (getf +palette-hex+ color)
+      (error "No hex for color ~S" color)))
 
-(defun render-svg (state)
-  "Return STATE as a line of SVG markup, entities painted back to front"
+(defun entity-rect (entity s)
+  "Write ENTITY's placeholder square to the cl-who stream S"
+  (let ((side (round (* +base-size+ (entity-scale entity))))
+        (pos  (entity-pos entity)))
+    (with-html-output (s)
+      (:rect :x (round (first pos))
+             :y (round (second pos))
+             :width side
+             :height side
+             :fill (fill-hex (entity-color entity))))))
+
+(defun render-svg (canvas)
+  "Return CANVAS as a line of SVG markup, entities painted back to front"
   (with-html-output-to-string (s)
     (:svg :xmlns "http://www.w3.org/2000/svg"
           :|viewBox| (format nil "0 0 ~D ~D" +canvas-w+ +canvas-h+)
-          (dolist (e (paint-order state))
-            (let ((side (round (* +base-size+ (entity-scale e)))))
-              (htm (:rect :x (round (first (entity-pos e)))
-                          :y (round (second (entity-pos e)))
-                          :width side
-                          :height side
-                          :fill (fill-hex (entity-color e)))))))))
+          (dolist (entity (paint-order canvas))
+            (entity-rect entity s)))))

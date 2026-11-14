@@ -24,7 +24,11 @@ Example: \"MOOD=8 coral squiggle 340 teal blob 120 triangle 600 mustard\"
 
 Don't explain. Just the score and the words.")
 
-(defstruct parsed mood colors shapes numbers)
+(defstruct parsed
+  (mood    :none :read-only t)
+  (colors  '()   :read-only t)
+  (shapes  '()   :read-only t)
+  (numbers '()   :read-only t))
 
 (defun json-object (&rest plist)
   "Takes string keys."
@@ -32,10 +36,10 @@ Don't explain. Just the score and the words.")
     (loop for (k v) on plist by #'cddr do (setf (gethash k h) v))
     (jzon:stringify h)))
 
-(defun call-ollama (prompt)
-  (let ((response (dex:post "http://localhost:11434/api/generate"
+(defun call-ollama (llm-oracle prompt)
+  (let ((response (dex:post (llm-oracle-url llm-oracle)
                             :headers '(("Content-Type" . "application/json"))
-                            :content (json-object "model" "qwen2.5:1.5b"
+                            :content (json-object "model" (llm-oracle-model llm-oracle)
                                                   "prompt" prompt
                                                   "stream" nil))))
     (gethash "response" (jzon:parse response))))
@@ -44,9 +48,11 @@ Don't explain. Just the score and the words.")
   (format nil *prompt-template* passage))
 
 (defun scan-mood (text)
-  (ppcre:register-groups-bind ((#'parse-integer mood))
-    ("MOOD=(\\d+)" text)
-    (max 1 (min 10 mood))))
+  "The MOOD=N score clamped to 1-10, or :none."
+  (or (ppcre:register-groups-bind ((#'parse-integer mood))
+          ("MOOD=(\\d+)" text)
+        (max 1 (min 10 mood)))
+      :none))
 
 (defun scan-keywords (text valid)
   (loop for tok in (ppcre:split "\\s+" text)
@@ -58,21 +64,21 @@ Don't explain. Just the score and the words.")
         for n = (parse-integer tok :junk-allowed t)
         when n collect n))
 
-(defun assemble-mutations (parsed state rng)
-  "At most one mutation: an :add if there is a shape and two numbers, else a
-:recolor if there is a color, else a :nudge if there are two numbers."
-  (let ((shape (car (parsed-shapes parsed)))
-        (color (car (parsed-colors parsed)))
+(defun assemble-mutation (parsed canvas rng)
+  "An :add if there is a shape and two numbers, else a :recolor if there is a
+color, else a :nudge if there are two numbers, else :none."
+  (let ((shape (first (parsed-shapes parsed)))
+        (color (first (parsed-colors parsed)))
         (nums  (parsed-numbers parsed)))
     (cond
       ((and shape (>= (length nums) 2))
-       (list (list :add shape (first nums) (second nums)
-                   (or color (random-elt +palette+ rng)))))
+       (list :add shape (first nums) (second nums)
+             (or color (random-elt +palette+ rng))))
       (color
-        (list (list :recolor (random-id state rng) color)))
+       (list :recolor (random-id canvas rng) color))
       ((>= (length nums) 2)
-       (list (list :nudge (random-id state rng) (first nums) (second nums))))
-      (t '()))))
+       (list :nudge (random-id canvas rng) (first nums) (second nums)))
+      (t :none))))
 
 (defun parse-response (text)
   (make-parsed :mood    (scan-mood text)
@@ -80,12 +86,18 @@ Don't explain. Just the score and the words.")
                :shapes  (scan-keywords text +entity-types+)
                :numbers (scan-numbers text)))
 
-(defun llm-oracle (state rng)
-  "Falls back to the fake oracle when Ollama fails or the reply yields nothing."
+(defun proposal-from-reply (parsed canvas rng)
+  "The reply's mutation and mood, or the fake oracle's when either is :none."
+  (let ((mutation (assemble-mutation parsed canvas rng))
+        (mood     (parsed-mood parsed)))
+    (if (or (eq mutation :none) (eq mood :none))
+        (propose (make-fake-oracle) canvas rng)
+        (make-oracle-result :mutations (list mutation) :mood mood))))
+
+(defmethod propose ((llm-oracle llm-oracle) canvas rng)
+  "Falls back to the fake oracle when Ollama fails or the reply is unusable."
   (handler-case
-      (let* ((parsed (parse-response (call-ollama (build-prompt (next-passage!)))))
-             (muts   (assemble-mutations parsed state rng)))
-        (if muts
-            (make-oracle-result :mutations muts :mood (parsed-mood parsed))
-            (fake-oracle state rng)))
-    (error () (fake-oracle state rng))))
+      (proposal-from-reply
+       (parse-response (call-ollama llm-oracle (build-prompt (next-passage!))))
+       canvas rng)
+    (error () (propose (make-fake-oracle) canvas rng))))

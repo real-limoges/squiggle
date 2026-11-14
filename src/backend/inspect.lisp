@@ -2,14 +2,14 @@
 
 (in-package :squiggle/backend)
 
-(defun print-entity (e)
+(defun print-entity (entity)
   (format t "  id=~D ~A pos=~A scale=~,2F color=~A~%"
-          (entity-id e) (entity-type e) (entity-pos e)
-          (entity-scale e) (entity-color e)))
+          (entity-id entity) (entity-type entity) (entity-pos entity)
+          (entity-scale entity) (entity-color entity)))
 
-(defun print-state (&optional (state *state*))
-  (format t "~&--- ~D entities ---~%" (length (entities state)))
-  (mapc #'print-entity (entities state))
+(defun print-state (&optional (canvas *state*))
+  (format t "~&--- ~D entities ---~%" (length (entities canvas)))
+  (mapc #'print-entity (entities canvas))
   (values))
 
 (defun print-tick (n mutations)

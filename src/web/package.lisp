@@ -4,7 +4,7 @@
 
 (defpackage :squiggle/web
   (:use :cl :squiggle :cl-who)
-  (:import-from :squiggle/backend #:*state* #:*tick-observers*)
+  (:import-from :squiggle/backend #:*state* #:*tick-observers* #:observe-tick)
   (:export
    :render-svg :canvas-page :about-page
    :start-server! :stop-server!))

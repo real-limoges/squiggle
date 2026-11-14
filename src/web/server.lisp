@@ -4,19 +4,18 @@
 
 (in-package :squiggle/web)
 
+(defclass squiggle-acceptor (hunchentoot:acceptor) ()
+  (:documentation "Acceptor that serves the canvas, about page, and /events"))
 
-(defvar *acceptor* nil
-  "The running acceptor or NIL if it's stopped")
+(defstruct server
+  (acceptor nil :read-only t)
+  (lock (bt:make-lock "squiggle viewers") :read-only t)
+  ;; mutable
+  (viewers '())
+  (frame ""))
 
-(defvar *frame* ""
-  "The SVG of the last committed tick. Handlers can read this
-but never *STATE*")
-
-(defvar *viewers* '()
-  "Open /events output streams, one per watching browser")
-
-(defvar *viewers-lock* (bt:make-lock "squiggle viewers")
-  "Guards *VIEWERS* and every write to a viewer stream")
+(defvar *server* :stopped
+  "The running server, or :stopped. Handlers read its frame, never *STATE*")
 
 (defparameter +ping-seconds+ 15
   "Seconds between keep-alive comments on idle /events stream")
@@ -29,73 +28,85 @@ but never *STATE*")
 
 (defun write-sse (stream line)
   "Write LINE and the blank line that ends an SSE record.
-NIL if the viewer has gone"
+Returns :sent, or :gone if the viewer has left"
   (handler-case (progn (write-string line stream)
                        (terpri stream)
                        (terpri stream)
                        (force-output stream)
-                       t)
-    (error () nil)))
+                       :sent)
+    (error () :gone)))
 
-(defun send-to-viewer! (stream line)
-  "Write LINE to STREAM under lock. Drop the viewer if the write fails.
-Return T while the viewer is still connected"
-  (bt:with-lock-held (*viewers-lock*)
-    (cond ((not (member stream *viewers*)) nil)
-          ((write-sse stream line) t)
-          (t (setf *viewers* (remove stream *viewers*))
-             nil))))
+(defun deliver! (server stream line)
+  "Write LINE to a registered viewer, dropping it if the write fails.
+Call with the server lock held. Returns :sent or :dropped"
+  (ecase (write-sse stream line)
+    (:sent :sent)
+    (:gone (setf (server-viewers server) (remove stream (server-viewers server)))
+           :dropped)))
 
-(defun broadcast-frame! (svg)
+(defun send-to-viewer! (server stream line)
+  "Write LINE to STREAM under the server lock. Returns :sent, :dropped, or
+:unknown when STREAM is not a viewer"
+  (bt:with-lock-held ((server-lock server))
+    (if (member stream (server-viewers server))
+        (deliver! server stream line)
+        :unknown)))
+
+(defun broadcast-frame! (server svg)
   "Send SVG to every open viewer"
-  (let ((viewers (bt:with-lock-held (*viewers-lock*) (copy-list *viewers*))))
+  (let ((viewers (bt:with-lock-held ((server-lock server))
+                   (copy-list (server-viewers server)))))
     (dolist (stream viewers)
-      (send-to-viewer! stream (frame-line svg)))))
+      (send-to-viewer! server stream (frame-line svg)))))
 
-(defun publish-frame (state mutations)
-  "Tick observer that renders the committed STATE once and broadcasts it"
+(defmethod observe-tick ((server server) canvas mutations)
+  "Render the committed CANVAS once and broadcast it"
   (declare (ignore mutations))
-  (let ((svg (render-svg state)))
-    (setf *frame* svg)
-    (broadcast-frame! svg)))
+  (let ((svg (render-svg canvas)))
+    (setf (server-frame server) svg)
+    (broadcast-frame! server svg)))
 
 ;;; --- ROUTES ---
 
-(defun events-stream ()
+(defun events-stream (server)
   "Hold an /events connection open for as long as the browser is watching"
   (setf (hunchentoot:content-type*) "text/event-stream"
         (hunchentoot:header-out :cache-control) "no-cache")
   (let ((stream (flex:make-flexi-stream (hunchentoot:send-headers)
                                         :external-format :utf-8)))
-    (bt:with-lock-held (*viewers-lock*)
-      (push stream *viewers*))
-    (send-to-viewer! stream (frame-line *frame*))
+    (bt:with-lock-held ((server-lock server))
+      (push stream (server-viewers server)))
+    (send-to-viewer! server stream (frame-line (server-frame server)))
     (loop do (sleep +ping-seconds+)
-          while (send-to-viewer! stream ": ping"))
-    nil))
-
-(defclass squiggle-acceptor (hunchentoot:acceptor) ()
-  (:documentation "Acceptor that serves the canvas, about page, and /events"))
+          while (eq :sent (send-to-viewer! server stream ": ping")))))
 
 (defmethod hunchentoot:acceptor-dispatch-request ((acceptor squiggle-acceptor) request)
   (let ((path (hunchentoot:script-name request)))
-    (cond ((string= path "/")       (canvas-page *frame*))
+    (cond ((string= path "/")       (canvas-page (server-frame *server*)))
           ((string= path "/about")  (about-page))
-          ((string= path "/events") (events-stream))
+          ((string= path "/events") (events-stream *server*))
           (t (setf (hunchentoot:return-code*) hunchentoot:+http-not-found+)
              "not found"))))
 
 ;;;  --- LIFECYCLE ---
 
 (defun start-server! (&key (port 8080))
-  "Render the current canvas, register the broadcast observer, start the server"
-  (setf *frame* (render-svg *state*))
-  (pushnew 'publish-frame *tick-observers*)
-  (setf *acceptor* (hunchentoot:start (make-instance 'squiggle-acceptor :port port))))
+  "Render the current canvas, register the server as a tick observer, start
+serving. Signals if a server is already running"
+  (unless (eq *server* :stopped)
+    (error "The squiggle server is already running"))
+  (let ((server (make-server :acceptor (make-instance 'squiggle-acceptor :port port)
+                             :frame (render-svg *state*))))
+    (setf *server* server)
+    (push server *tick-observers*)
+    (hunchentoot:start (server-acceptor server))
+    server))
 
 (defun stop-server! ()
-  "Stop serving and unregister the broadcast observer"
-  (setf *tick-observers* (remove 'publish-frame *tick-observers*))
-  (when *acceptor*
-    (hunchentoot:stop *acceptor*)
-    (setf *acceptor* nil)))
+  "Stop serving and unregister the observer. Returns :stopped, or :not-running"
+  (if (eq *server* :stopped)
+      :not-running
+      (let ((server *server*))
+        (setf *tick-observers* (remove server *tick-observers*))
+        (hunchentoot:stop (server-acceptor server))
+        (setf *server* :stopped))))

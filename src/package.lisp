@@ -6,9 +6,9 @@
   (:use :cl)
   (:export
    :+palette+ :+canvas-w+ :+canvas-h+ :+min-scale+ :+max-scale+ :+entity-types+
-   :make-entity :copy-entity
+   :make-entity :entity-with
    :entity-id :entity-type :entity-pos :entity-scale :entity-color :entity-layer
-   :make-canvas :copy-canvas :canvas-entities :canvas-next-id
+   :make-canvas :canvas-with :canvas-entities :canvas-next-id
    :entities :find-entity
-   :make-oracle-result :copy-oracle-result :oracle-result-p
-   :oracle-result-mutations :oracle-result-mood ))
+   :make-oracle-result :oracle-result-p
+   :oracle-result-mutations :oracle-result-mood))

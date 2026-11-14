@@ -9,6 +9,9 @@
   (:export
    :random-elt :random-id :random-delta
    :load-passages! :next-passage!
-   :fake-oracle :llm-oracle
+   :propose
+   :fake-oracle :make-fake-oracle
+   :llm-oracle :make-llm-oracle
+   :generate-mutation
    :use-fake-oracle! :use-llm-oracle!
-   :*generators* :*oracle*))
+   :*oracle*))

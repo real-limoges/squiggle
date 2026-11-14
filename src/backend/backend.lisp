@@ -3,10 +3,30 @@
 
 (in-package :squiggle/backend)
 
-;;; --- RNG ---
+;;; --- Globals ---
 
-(defvar *oracle-rng* nil)
-(defvar *jitter-rng* nil)
+(defstruct rngs
+  "The two independent random streams: one for oracle proposals, one for
+jitter and layers."
+  (oracle nil :read-only t)
+  (jitter nil :read-only t))
+
+;; Unbound until boot! or seed-rngs! sets it.
+(defvar *rngs*)
+
+(defvar *state* (make-canvas))
+
+(defvar *tick-observers* '()
+  "Observers whose observe-tick method runs after each tick commits")
+
+(defvar *last-mood* :none
+  "Recorded by tick! for the tempo subsystem; nothing reads it yet")
+
+(defparameter +jitter-nudge-prob+ 0.3)
+(defparameter +jitter-recolor-prob+ 0.05)
+(defparameter +jitter-magnitude+ 3)
+
+;;; --- RNG ---
 
 (defun entropy-seed ()
   (random most-positive-fixnum (make-random-state t)))
@@ -15,66 +35,45 @@
   (sb-ext:seed-random-state seed))
 
 (defun seed-rngs! (main-seed)
-  (setf *oracle-rng* (make-rng main-seed)
-        *jitter-rng* (make-rng (logxor main-seed #xA5A5A5A5))))
+  (setf *rngs* (make-rngs :oracle (make-rng main-seed)
+                          :jitter (make-rng (logxor main-seed #xA5A5A5A5)))))
 
 ;;; --- State ---
 
-(defparameter *state* (make-canvas))
-
-(defvar *tick-observers* '()
-  "Functions called as (fn state mutations) after each tick commits")
-
-;; Recorded by tick! for the tempo subsystem; nothing reads it yet.
-(defparameter *last-mood* nil)
-
-(defun with-entities (state new-entities)
-  (let ((copy (copy-canvas state)))
-    (setf (canvas-entities copy) new-entities)
-    copy))
-
-(defun update-entity (state id fn)
-  "Replace entity ID with (FN copy-of-entity). STATE comes back unchanged if ID
-is missing."
-  (if (null (find-entity state id))
-      state
-      (with-entities
-        state
-        (mapcar (lambda (e)
-                  (if (= (entity-id e) id) (funcall fn (copy-entity e)) e))
-                (entities state)))))
+(defun update-entity (canvas id fn)
+  "Replace entity ID with (FN entity). Signals when ID is not on CANVAS."
+  (unless (find-entity canvas id)
+    (error "No entity ~D on the canvas" id))
+  (canvas-with canvas
+               :entities (mapcar (lambda (entity)
+                                   (if (= (entity-id entity) id) (funcall fn entity) entity))
+                                 (entities canvas))))
 
 ;;; --- Dispatch ---
 
 (defun stamp-layers (mutations jitter-rng)
   "Append a random layer to each :add, giving apply-add its LAYER argument.
 Runs after validation, which expects the unstamped four-argument :add."
-  (mapcar (lambda (m)
-            (if (eq (first m) :add)
-                (append m (list (random most-positive-fixnum jitter-rng)))
-                m))
+  (mapcar (lambda (mutation)
+            (if (eq (first mutation) :add)
+                (append mutation (list (random most-positive-fixnum jitter-rng)))
+                mutation))
           mutations))
 
-(defun apply-mutation (state mutation)
-  (let ((op (first mutation))
-        (args (rest mutation)))
-    (case op
-      (:nudge   (apply #'apply-nudge   state args))
-      (:recolor (apply #'apply-recolor state args))
-      (:resize  (apply #'apply-resize  state args))
-      (:add     (apply #'apply-add     state args))
-      (:remove  (apply #'apply-remove  state args))
-      (otherwise state))))
+(defun apply-mutation (canvas mutation)
+  (let ((args (rest mutation)))
+    (ecase (first mutation)
+      (:nudge   (apply #'apply-nudge   canvas args))
+      (:recolor (apply #'apply-recolor canvas args))
+      (:resize  (apply #'apply-resize  canvas args))
+      (:add     (apply #'apply-add     canvas args))
+      (:remove  (apply #'apply-remove  canvas args)))))
 
-(defun apply-mutations (state mutations)
-  (reduce #'apply-mutation mutations :initial-value state))
+(defun apply-mutations (canvas mutations)
+  (reduce #'apply-mutation mutations :initial-value canvas))
 
 ;;; --- Jitter ---
 ;;; Sub-perceptual drift so the canvas is never still
-
-(defparameter +jitter-nudge-prob+ 0.3)
-(defparameter +jitter-recolor-prob+ 0.05)
-(defparameter +jitter-magnitude+ 3)
 
 (defun random-signed (n rng)
   "An integer in [-N, N]."
@@ -88,28 +87,26 @@ Runs after validation, which expects the unstamped four-argument :add."
 (defun make-recolor (entity rng)
   (list :recolor (entity-id entity) (squiggle/oracle:random-elt +palette+ rng)))
 
-(defun jitter-mutations (state rng)
+(defun jitter-mutations (canvas rng)
   "Each entity rolls separately for a nudge and a recolor."
-  (loop for e in (entities state)
+  (loop for entity in (entities canvas)
         when (< (random 1.0 rng) +jitter-nudge-prob+)
-          collect (make-nudge e rng)
+          collect (make-nudge entity rng)
         when (< (random 1.0 rng) +jitter-recolor-prob+)
-          collect (make-recolor e rng)))
+          collect (make-recolor entity rng)))
 
 ;;; --- Lifecycle ---
 
 (defun boot! ()
-  (unless *oracle-rng*
+  (unless (boundp '*rngs*)
     (seed-rngs! (entropy-seed))))
 
 (defun make-seed-canvas ()
-  (let ((c (make-canvas)))
-    (setf (canvas-next-id c) 4
-          (canvas-entities c)
-          (list (make-entity :id 1 :type :blob     :pos '(220 180) :scale 1.3 :color :coral   :layer 1000)
-                (make-entity :id 2 :type :squiggle :pos '(400 320) :scale 1.0 :color :teal    :layer 2000)
-                (make-entity :id 3 :type :triangle :pos '(560 200) :scale 0.8 :color :mustard :layer 3000)))
-    c))
+  (make-canvas
+   :next-id 4
+   :entities (list (make-entity :id 1 :type :blob     :pos '(220 180) :scale 1.3 :color :coral   :layer 1000)
+                   (make-entity :id 2 :type :squiggle :pos '(400 320) :scale 1.0 :color :teal    :layer 2000)
+                   (make-entity :id 3 :type :triangle :pos '(560 200) :scale 0.8 :color :mustard :layer 3000))))
 
 (defun reset! (&optional seed)
   "For the REPL and tests only; the running piece never resets."
@@ -118,15 +115,22 @@ Runs after validation, which expects the unstamped four-argument :add."
 
 ;;; --- Tick ---
 
+(defgeneric observe-tick (observer canvas mutations)
+  (:documentation "Runs after a tick commits CANVAS. MUTATIONS are the oracle's,
+as applied."))
+
+(defun notify-observers (canvas mutations)
+  (dolist (observer *tick-observers*)
+    (observe-tick observer canvas mutations)))
+
 (defun tick! (oracle)
   "Returns the oracle's mutations as applied (jitter not included)."
   (boot!)
-  (let* ((result    (funcall oracle *state* *oracle-rng*))
-         (valid     (validate-mutations (oracle-result-mutations result)))
-         (mutations (stamp-layers valid *jitter-rng*)))
+  (let* ((result    (squiggle/oracle:propose oracle *state* (rngs-oracle *rngs*)))
+         (valid     (validate-mutations *state* (oracle-result-mutations result)))
+         (mutations (stamp-layers valid (rngs-jitter *rngs*))))
     (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))
-    (setf *state* (apply-mutations *state* (jitter-mutations *state* *jitter-rng*)))
-    (dolist (observe *tick-observers*)
-      (funcall observe *state* mutations))
+    (setf *state* (apply-mutations *state* (jitter-mutations *state* (rngs-jitter *rngs*))))
+    (notify-observers *state* mutations)
     mutations))

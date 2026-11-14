@@ -50,6 +50,7 @@
   :serial t
   :components ((:file "package")
                (:file "mutation-tests")
+               (:file "engine-tests")
                (:file "web-tests"))
   :perform (asdf:test-op (op c)
                          (uiop:symbol-call :fiveam :run! :squiggle)))

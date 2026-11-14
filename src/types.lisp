@@ -10,18 +10,41 @@
 (defparameter +entity-types+ '(:blob :squiggle :triangle :curve))
 
 (defstruct entity
-  id type pos scale color layer)
+  (id    nil :read-only t)
+  (type  nil :read-only t)
+  (pos   nil :read-only t)
+  (scale nil :read-only t)
+  (color nil :read-only t)
+  (layer nil :read-only t))
 
 (defstruct canvas
-  (next-id 1)
-  (entities '()))
+  (next-id  1   :read-only t)
+  (entities '() :read-only t))
 
 (defstruct oracle-result
-  (mutations '())
-  mood)
+  (mutations '() :read-only t)
+  (mood      :none :read-only t))
 
-(defun entities (state)
-  (canvas-entities state))
+(defun entity-with (entity &key (pos   (entity-pos entity))
+                                (scale (entity-scale entity))
+                                (color (entity-color entity)))
+  "A copy of ENTITY with POS, SCALE or COLOR changed. Id, type and layer never
+change."
+  (make-entity :id    (entity-id entity)
+               :type  (entity-type entity)
+               :pos   pos
+               :scale scale
+               :color color
+               :layer (entity-layer entity)))
 
-(defun find-entity (state id)
-  (find id (entities state) :key (lambda (e) (entity-id e))))
+(defun canvas-with (canvas &key (next-id  (canvas-next-id canvas))
+                                (entities (canvas-entities canvas)))
+  "A copy of CANVAS with NEXT-ID or ENTITIES changed."
+  (make-canvas :next-id next-id :entities entities))
+
+(defun entities (canvas)
+  (canvas-entities canvas))
+
+(defun find-entity (canvas id)
+  "The entity with ID or NIL."
+  (find id (entities canvas) :key #'entity-id))

@@ -3,39 +3,37 @@
 
 (in-package :squiggle/backend)
 
-(defun apply-nudge (state id dx dy)
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-pos e)
-                         (list (+ (first  (entity-pos e)) dx)
-                               (+ (second (entity-pos e)) dy)))
-                   e)))
+(defun moved-pos (pos dx dy)
+  (list (+ (first pos) dx)
+        (+ (second pos) dy)))
 
-(defun apply-recolor (state id color)
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-color e) color)
-                   e)))
+(defun apply-nudge (canvas id dx dy)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :pos (moved-pos (entity-pos entity) dx dy)))))
 
-(defun apply-resize (state id factor)
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-scale e) (* (entity-scale e) factor))
-                   e)))
+(defun apply-recolor (canvas id color)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :color color))))
 
-(defun apply-add (state type x y color layer)
-  (let* ((id    (canvas-next-id state))
-         (new-e (make-entity :id id
-                             :type type
-                             :pos (list x y)
-                             :scale 1.0
-                             :color color
-                             :layer layer))
-         (new-s (copy-canvas state)))
-    (setf (canvas-entities new-s) (append (canvas-entities new-s) (list new-e)))
-    (setf (canvas-next-id  new-s) (1+ id))
-    new-s))
+(defun apply-resize (canvas id factor)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :scale (* (entity-scale entity) factor)))))
 
-(defun apply-remove (state id)
-  (with-entities state
-                 (remove id (entities state) :key #'entity-id)))
+(defun apply-add (canvas type x y color layer)
+  (let* ((id     (canvas-next-id canvas))
+         (entity (make-entity :id id
+                              :type type
+                              :pos (list x y)
+                              :scale 1.0
+                              :color color
+                              :layer layer)))
+    (canvas-with canvas
+                 :next-id (1+ id)
+                 :entities (append (entities canvas) (list entity)))))
+
+(defun apply-remove (canvas id)
+  (canvas-with canvas
+               :entities (remove id (entities canvas) :key #'entity-id)))

@@ -3,11 +3,11 @@
 (defpackage :squiggle/backend
   (:use :cl :squiggle)
   (:export
-   :*oracle-rng* :*jitter-rng* :seed-rngs!
-   :*state* :*tick-observers*
+   :*rngs* :rngs-oracle :rngs-jitter :seed-rngs!
+   :*state* :*tick-observers* :observe-tick
    :boot! :reset! :make-seed-canvas
    :stamp-layers :apply-mutation :apply-mutations
-   :with-entities :update-entity
+   :update-entity
    :apply-nudge :apply-recolor :apply-resize :apply-add :apply-remove
    :validate-mutation :validate-mutations
    :tick!
