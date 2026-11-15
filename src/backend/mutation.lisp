@@ -1,47 +1,40 @@
-;;;; mutation.lisp
-;;;;
-;;;; Mutation verbs — one flat function each, state in / new state out.
+;;;; mutation.lisp: one function per verb, canvas in and new canvas out
+;;;; These trust their arguments; the validator has already checked them.
 
 (in-package :squiggle/backend)
 
-(defun apply-nudge (state id dx dy)
-  "Shift entity ID by (DX, DY). Bounds are the validator's job."
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-pos e)
-                         (list (+ (first  (entity-pos e)) dx)
-                               (+ (second (entity-pos e)) dy)))
-                   e)))
+(defun moved-pos (pos dx dy)
+  (list (+ (first pos) dx)
+        (+ (second pos) dy)))
 
-(defun apply-recolor (state id color)
-  "Recolor entity ID. Color validity is the validator's job."
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-color e) color)
-                   e)))
+(defun apply-nudge (canvas id dx dy)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :pos (moved-pos (entity-pos entity) dx dy)))))
 
-(defun apply-resize (state id factor)
-  "Multiply entity ID's scale by FACTOR. Bounds are the validator's job."
-  (update-entity state id
-                 (lambda (e)
-                   (setf (entity-scale e) (* (entity-scale e) factor))
-                   e)))
+(defun apply-recolor (canvas id color)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :color color))))
 
-(defun apply-add (state type x y color layer)
-  "Append a new entity. Type/color validity is the validator's job."
-  (let* ((id    (canvas-next-id state))
-         (new-e (make-entity :id id 
-                             :type type
-                             :pos (list x y) 
-                             :scale 1.0 
-                             :color color
-                             :layer layer))
-         (new-s (copy-canvas state)))
-    (setf (canvas-entities new-s) (append (canvas-entities new-s) (list new-e)))
-    (setf (canvas-next-id  new-s) (1+ id))
-    new-s))
+(defun apply-resize (canvas id factor)
+  (update-entity canvas id
+                 (lambda (entity)
+                   (entity-with entity :scale (* (entity-scale entity) factor)))))
 
-(defun apply-remove (state id)
-  "Drop entity ID. The entity-count band guard is the sanity layer's job."
-  (with-entities state
-                 (remove id (entities state) :key #'entity-id)))
+(defun apply-add (canvas type x y color layer)
+  (let* ((id     (canvas-next-id canvas))
+         (entity (make-entity :id id
+                              :type type
+                              :pos (list x y)
+                              :scale 1.0
+                              :color color
+                              :layer layer)))
+    (canvas-with canvas
+                 :next-id (1+ id)
+                 :entities (append (entities canvas) (list entity)))))
+
+(defun apply-remove (canvas id)
+  (require-entity canvas id)
+  (canvas-with canvas
+               :entities (remove id (entities canvas) :key #'entity-id)))

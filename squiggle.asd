@@ -3,13 +3,24 @@
 (asdf:defsystem :squiggle
   :description "A silly Jazz inspired living piece of art"
   :author "Real Limoges <b.real.limoges@gmail.com>"
-  :license "MIT"
+  :license "BSD-2-Clause"
   :version "0.1.0"
   :depends-on ()
   :pathname "src/"
   :serial t
   :components ((:file "package")
                (:file "types")))
+
+(asdf:defsystem :squiggle/web
+  :depends-on (#:squiggle #:squiggle/backend
+                          #:hunchentoot #:cl-who #:flexi-streams
+                          #:bordeaux-threads)
+  :pathname "src/web/"
+  :serial t
+  :components ((:file "package")
+               (:file "svg")
+               (:file "page")
+               (:file "server")))
 
 (asdf:defsystem :squiggle/oracle
   :depends-on (#:squiggle #:dexador #:com.inuoe.jzon #:cl-ppcre)
@@ -28,14 +39,18 @@
   :components ((:file "package")
                (:file "backend")
                (:file "mutation")
+               (:file "validator")
                (:file "inspect")))
 
 (asdf:defsystem :squiggle/tests
   :depends-on (#:fiveam
-               #:squiggle #:squiggle/oracle #:squiggle/backend)
+               #:squiggle #:squiggle/oracle #:squiggle/backend
+               #:squiggle/web)
   :pathname "tests/"
   :serial t
   :components ((:file "package")
-               (:file "mutation-tests"))
+               (:file "mutation-tests")
+               (:file "engine-tests")
+               (:file "web-tests"))
   :perform (asdf:test-op (op c)
-              (uiop:symbol-call :fiveam :run! :squiggle)))
+                         (uiop:symbol-call :fiveam :run! :squiggle)))

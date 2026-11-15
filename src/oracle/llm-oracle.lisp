@@ -1,7 +1,6 @@
-;;;; llm-oracle.lisp
-;;;;
-;;;; LLM-backed oracle. Peer to fake-oracle: same interface (state → mutations),
-;;;; different implementation. Runtime config picks which one tick! calls.
+;;;; llm-oracle.lisp: Qwen reads a passage and answers with a mood and loose tokens
+;;;; The prompt carries no canvas state; the reply's words and numbers are
+;;;; scanned into token bags and one mutation is assembled from them.
 
 (in-package :squiggle/oracle)
 
@@ -23,22 +22,27 @@ Where:
 
 Example: \"MOOD=8 coral squiggle 340 teal blob 120 triangle 600 mustard\"
 
-Don't explain. Just the score and the words."
-  "Qwen prompt template; ~A = corpus passage. Rationale lives in docs/prompt.md.")
+Don't explain. Just the score and the words.")
 
-(defstruct parsed mood colors shapes numbers)
+(defparameter +token-punctuation+ ".,;:!?()[]{}\"'"
+  "Trimmed from both ends of each reply token, so coral, still reads as coral")
+
+(defstruct parsed
+  (mood    :none :read-only t)
+  (colors  '()   :read-only t)
+  (shapes  '()   :read-only t)
+  (numbers '()   :read-only t))
 
 (defun json-object (&rest plist)
-  "Build a JSON object string from a flat KEY VALUE plist (string keys)."
+  "Takes string keys."
   (let ((h (make-hash-table :test 'equal)))
     (loop for (k v) on plist by #'cddr do (setf (gethash k h) v))
     (jzon:stringify h)))
 
-(defun call-ollama (prompt)
-  "POST PROMPT to the local Ollama sidecar; return Qwen's raw completion string."
-  (let ((response (dex:post "http://localhost:11434/api/generate"
+(defun call-ollama (llm-oracle prompt)
+  (let ((response (dex:post (llm-oracle-url llm-oracle)
                             :headers '(("Content-Type" . "application/json"))
-                            :content (json-object "model" "qwen2.5:1.5b"
+                            :content (json-object "model" (llm-oracle-model llm-oracle)
                                                   "prompt" prompt
                                                   "stream" nil))))
     (gethash "response" (jzon:parse response))))
@@ -47,54 +51,63 @@ Don't explain. Just the score and the words."
   (format nil *prompt-template* passage))
 
 (defun scan-mood (text)
-  "Extracts the mood from TEXT"
-  (ppcre:register-groups-bind ((#'parse-integer mood))
-    ("MOOD=(\\d+)" text)
-    (max 1 (min 10 mood))))
+  "The MOOD=N score clamped to 1-10, or :none."
+  (or (ppcre:register-groups-bind ((#'parse-integer mood))
+          ("MOOD=(\\d+)" text)
+        (max 1 (min 10 mood)))
+      :none))
+
+(defun reply-tokens (text)
+  "TEXT split on whitespace, each token trimmed of surrounding punctuation."
+  (loop for tok in (ppcre:split "\\s+" text)
+        collect (string-trim +token-punctuation+ tok)))
 
 (defun scan-keywords (text valid)
-  "Finds KEYWORDS in TEXT that are in the VALID list"
-  (loop for tok in (ppcre:split "\\s+" text)
+  (loop for tok in (reply-tokens text)
         for kw = (find-symbol (string-upcase tok) :keyword)
         when (member kw valid) collect kw))
 
 (defun scan-numbers (text)
-  "Integer tokens in TEXT"
-  (loop for tok in (ppcre:split "\\s+" text)
+  (loop for tok in (reply-tokens text)
         for n = (parse-integer tok :junk-allowed t)
         when n collect n))
 
-(defun assemble-mutations (parsed state rng)
-  "Draw ONE mutation from PARSED's token bags. Returns a 1-element list, or ()."
-  (let ((shape (car (parsed-shapes parsed)))
-        (color (car (parsed-colors parsed)))
-        (nums  (parsed-numbers parsed)))
+(defun assemble-mutation (parsed canvas rng)
+  "An :add if there is a shape and two numbers, else a :recolor if there is a
+color, else a :nudge if there are two numbers, else :none. The :recolor and
+:nudge need an entity to target, so an empty CANVAS gives :none for them."
+  (let ((shape    (first (parsed-shapes parsed)))
+        (color    (first (parsed-colors parsed)))
+        (nums     (parsed-numbers parsed))
+        (targets? (entities canvas)))
     (cond
       ((and shape (>= (length nums) 2))
-       (list (list :add shape (first nums) (second nums)
-                   (or color (random-elt +palette+ rng)))))
-      (color
-        (list (list :recolor (random-id state rng) color)))
-      ((>= (length nums) 2)
-       (list (list :nudge (random-id state rng) (first nums) (second nums))))
-      (t '()))))
+       (list :add shape (first nums) (second nums)
+             (or color (random-elt +palette+ rng))))
+      ((and color targets?)
+       (list :recolor (random-id canvas rng) color))
+      ((and (>= (length nums) 2) targets?)
+       (list :nudge (random-id canvas rng) (first nums) (second nums)))
+      (t :none))))
 
 (defun parse-response (text)
-  "Qwen text -> parsed token bags. Pure, lenient — unknown tokens ignored,
-   never errors."
   (make-parsed :mood    (scan-mood text)
                :colors  (scan-keywords text +palette+)
                :shapes  (scan-keywords text +entity-types+)
                :numbers (scan-numbers text)))
 
-(defun llm-oracle (state rng)
-  "Run one Qwen turn -> one mutation. Falls back to fake-oracle on any error
-   (Ollama down, HTTP failure) or an empty parse."
-  (handler-case
-      (let* ((parsed (parse-response (call-ollama (build-prompt (next-passage!)))))
-             (muts   (assemble-mutations parsed state rng)))
-        (if muts
-            (make-oracle-result :mutations muts :mood (parsed-mood parsed))
-            (fake-oracle state rng)))
-    (error () (fake-oracle state rng))))
+(defun proposal-from-reply (parsed canvas rng)
+  "The reply's mutation and mood, or the fake oracle's when either is :none."
+  (let ((mutation (assemble-mutation parsed canvas rng))
+        (mood     (parsed-mood parsed)))
+    (if (or (eq mutation :none) (eq mood :none))
+        (propose (make-fake-oracle) canvas rng)
+        (make-oracle-result :mutations (list mutation) :mood mood))))
 
+(defmethod propose ((llm-oracle llm-oracle) canvas rng)
+  "Falls back to the fake oracle when Ollama fails or the reply is unusable."
+  (handler-case
+      (proposal-from-reply
+       (parse-response (call-ollama llm-oracle (build-prompt (next-passage!))))
+       canvas rng)
+    (error () (propose (make-fake-oracle) canvas rng))))

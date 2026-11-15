@@ -1,18 +1,30 @@
-;;;; corpus.lisp
-;;;;
-;;;; description
-
+;;;; corpus.lisp: walks the book one passage at a time
 
 (in-package :squiggle/oracle)
 
-(defparameter *passages* nil)
-(defparameter *passage-idx* 0)
+(defstruct corpus
+  (passages #() :read-only t)
+  ;; mutable
+  (index 0))
 
-(defun load-passages! (&optional (path "corpus/passages.txt"))
-  (setf *passages* (coerce (uiop:read-file-lines path) 'vector)
-        *passage-idx* 0))
+(defvar *corpus* (make-corpus)
+  "The loaded book and the passage the piece is on")
+
+(defun default-passages-path ()
+  "corpus/passages.txt in the repo, wherever the process was started."
+  (asdf:system-relative-pathname :squiggle "corpus/passages.txt"))
+
+(defun load-passages! (&optional (path (default-passages-path)))
+  "Load PATH from its first passage. Returns :loaded."
+  (setf *corpus* (make-corpus :passages (coerce (uiop:read-file-lines path) 'vector)))
+  :loaded)
+
+(defun advance-index! (corpus)
+  "Wraps to the start at the end of the book."
+  (setf (corpus-index corpus)
+        (mod (1+ (corpus-index corpus)) (length (corpus-passages corpus)))))
 
 (defun next-passage! ()
-  "Return the next corpus passage, advancing the pointer"
-  (prog1 (aref *passages* *passage-idx*)
-    (setf *passage-idx* (mod (1+ *passage-idx*) (length *passages*)))))
+  (let ((corpus *corpus*))
+    (prog1 (aref (corpus-passages corpus) (corpus-index corpus))
+      (advance-index! corpus))))

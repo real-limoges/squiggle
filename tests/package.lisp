@@ -1,10 +1,8 @@
-;;;; package.lisp
-;;;;
-;;;; Test package, suite, and shared infrastructure.
+;;;; package.lisp: test package, suite and the deftest-engine macro
 
 (defpackage :squiggle/tests
-  (:use :cl :fiveam 
-        :squiggle :squiggle/backend :squiggle/oracle))
+  (:use :cl :fiveam
+        :squiggle :squiggle/backend :squiggle/oracle :squiggle/web))
 
 (in-package :squiggle/tests)
 
@@ -14,7 +12,7 @@
 (in-suite :squiggle)
 
 (defmacro deftest-engine (name &body body)
-  "Define a test in the :squiggle suite, resetting engine state first."
+  "A test that starts from the seed canvas with RNGs seeded from 42."
   `(test (,name :suite :squiggle)
      (reset! 42)
      ,@body))
