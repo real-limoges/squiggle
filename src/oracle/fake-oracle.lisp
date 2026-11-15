@@ -24,7 +24,13 @@
     (:add     (random-add rng))
     (:remove  (list :remove (random-id canvas rng)))))
 
+(defun fake-verb (canvas rng)
+  "A random verb from +fake-verbs+, or :add when CANVAS has no entity to target."
+  (if (entities canvas)
+      (random-elt +fake-verbs+ rng)
+      :add))
+
 (defmethod propose ((fake-oracle fake-oracle) canvas rng)
   (make-oracle-result
-    :mutations (list (generate-mutation (random-elt +fake-verbs+ rng) canvas rng))
+    :mutations (list (generate-mutation (fake-verb canvas rng) canvas rng))
     :mood (1+ (random 10 rng))))

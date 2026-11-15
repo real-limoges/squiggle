@@ -35,5 +35,6 @@
                  :entities (append (entities canvas) (list entity)))))
 
 (defun apply-remove (canvas id)
+  (require-entity canvas id)
   (canvas-with canvas
                :entities (remove id (entities canvas) :key #'entity-id)))

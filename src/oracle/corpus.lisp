@@ -10,7 +10,11 @@
 (defvar *corpus* (make-corpus)
   "The loaded book and the passage the piece is on")
 
-(defun load-passages! (&optional (path "corpus/passages.txt"))
+(defun default-passages-path ()
+  "corpus/passages.txt in the repo, wherever the process was started."
+  (asdf:system-relative-pathname :squiggle "corpus/passages.txt"))
+
+(defun load-passages! (&optional (path (default-passages-path)))
   "Load PATH from its first passage. Returns :loaded."
   (setf *corpus* (make-corpus :passages (coerce (uiop:read-file-lines path) 'vector)))
   :loaded)

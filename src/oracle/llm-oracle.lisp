@@ -24,6 +24,9 @@ Example: \"MOOD=8 coral squiggle 340 teal blob 120 triangle 600 mustard\"
 
 Don't explain. Just the score and the words.")
 
+(defparameter +token-punctuation+ ".,;:!?()[]{}\"'"
+  "Trimmed from both ends of each reply token, so coral, still reads as coral")
+
 (defstruct parsed
   (mood    :none :read-only t)
   (colors  '()   :read-only t)
@@ -54,29 +57,36 @@ Don't explain. Just the score and the words.")
         (max 1 (min 10 mood)))
       :none))
 
-(defun scan-keywords (text valid)
+(defun reply-tokens (text)
+  "TEXT split on whitespace, each token trimmed of surrounding punctuation."
   (loop for tok in (ppcre:split "\\s+" text)
+        collect (string-trim +token-punctuation+ tok)))
+
+(defun scan-keywords (text valid)
+  (loop for tok in (reply-tokens text)
         for kw = (find-symbol (string-upcase tok) :keyword)
         when (member kw valid) collect kw))
 
 (defun scan-numbers (text)
-  (loop for tok in (ppcre:split "\\s+" text)
+  (loop for tok in (reply-tokens text)
         for n = (parse-integer tok :junk-allowed t)
         when n collect n))
 
 (defun assemble-mutation (parsed canvas rng)
   "An :add if there is a shape and two numbers, else a :recolor if there is a
-color, else a :nudge if there are two numbers, else :none."
-  (let ((shape (first (parsed-shapes parsed)))
-        (color (first (parsed-colors parsed)))
-        (nums  (parsed-numbers parsed)))
+color, else a :nudge if there are two numbers, else :none. The :recolor and
+:nudge need an entity to target, so an empty CANVAS gives :none for them."
+  (let ((shape    (first (parsed-shapes parsed)))
+        (color    (first (parsed-colors parsed)))
+        (nums     (parsed-numbers parsed))
+        (targets? (entities canvas)))
     (cond
       ((and shape (>= (length nums) 2))
        (list :add shape (first nums) (second nums)
              (or color (random-elt +palette+ rng))))
-      (color
+      ((and color targets?)
        (list :recolor (random-id canvas rng) color))
-      ((>= (length nums) 2)
+      ((and (>= (length nums) 2) targets?)
        (list :nudge (random-id canvas rng) (first nums) (second nums)))
       (t :none))))
 

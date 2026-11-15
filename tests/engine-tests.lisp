@@ -11,6 +11,26 @@
 (defmethod observe-tick ((recording-observer recording-observer) canvas mutations)
   (push (list canvas mutations) (recording-observer-ticks recording-observer)))
 
+(defparameter +garbage-mutations+
+  (list (list :explode 1)                ; unknown verb
+        (list :add :blob 10)             ; wrong arity
+        (list :add :hexagon 10 10 :teal) ; off-vocabulary shape
+        (list :add :blob 10 10 :purple)  ; off-palette color
+        (list :recolor 99 :teal)         ; id not on the canvas
+        (list :nudge 1 :left 2)          ; non-number delta
+        (list :resize 1 -2)              ; non-positive factor
+        (list* :remove 1 2)              ; improper list
+        (list)                           ; empty
+        "coral squiggle 340")            ; not a list at all
+  "What a 1.5B model's worst reply could assemble to; the validator rejects all of it")
+
+(defstruct garbage-oracle)
+
+(defmethod propose ((garbage-oracle garbage-oracle) canvas rng)
+  "Proposes nothing the validator lets through."
+  (declare (ignore canvas rng))
+  (make-oracle-result :mutations +garbage-mutations+ :mood 3))
+
 (defun valid-entity-p (entity)
   (and (member (entity-color entity) +palette+)
        (member (entity-type entity) +entity-types+)))
@@ -41,8 +61,11 @@
 (deftest-engine apply-mutation-signals-on-unknown-verb
   (signals error (apply-mutation *state* '(:explode 1))))
 
-(deftest-engine update-entity-signals-on-missing-id
-  (signals error (apply-nudge *state* 99 1 1)))
+(deftest-engine id-verbs-signal-on-missing-id
+  (signals error (apply-nudge *state* 99 1 1))
+  (signals error (apply-recolor *state* 99 :teal))
+  (signals error (apply-resize *state* 99 1.1))
+  (signals error (apply-remove *state* 99)))
 
 (deftest-engine nudge-leaves-the-original-canvas-alone
   (apply-nudge *state* 1 10 20)
@@ -63,6 +86,41 @@
                  (squiggle/oracle::parse-response "coral squiggle 340 120")
                  *state* (rngs-oracle *rngs*))))
     (is (integerp (oracle-result-mood result)))))
+
+(test llm-reply-ignores-punctuation
+  (let ((parsed (squiggle/oracle::parse-response "MOOD=7 coral, squiggle. (340 120!")))
+    (is (equal '(:coral) (squiggle/oracle::parsed-colors parsed)))
+    (is (equal '(:squiggle) (squiggle/oracle::parsed-shapes parsed)))
+    (is (equal '(340 120) (squiggle/oracle::parsed-numbers parsed)))))
+
+(deftest-engine llm-reply-on-an-empty-canvas-needs-an-add
+  (let ((recolor (squiggle/oracle::parse-response "MOOD=4 coral"))
+        (add     (squiggle/oracle::parse-response "MOOD=4 blob 10 20")))
+    (is (eq :none (squiggle/oracle::assemble-mutation recolor (make-canvas) (rngs-oracle *rngs*))))
+    (is (eq :add (first (squiggle/oracle::assemble-mutation add (make-canvas) (rngs-oracle *rngs*)))))))
+
+;;; --- Empty Canvas ---
+
+(deftest-engine fake-oracle-adds-on-an-empty-canvas
+  (dotimes (i 20)
+    (let ((result (propose (make-fake-oracle) (make-canvas) (rngs-oracle *rngs*))))
+      (is (eq :add (first (first (oracle-result-mutations result))))))))
+
+(deftest-engine tick-survives-an-empty-canvas
+  (setf *state* (make-canvas))
+  (finishes (tick! (make-fake-oracle)))
+  (is (= 1 (length (entities *state*)))))
+
+;;; --- Garbage Oracle ---
+
+(deftest-engine garbage-oracle-ticks-keep-the-canvas-valid
+  (dotimes (i 100)
+    (finishes (tick! (make-garbage-oracle)))
+    (is (every #'valid-entity-p (entities *state*)))))
+
+(deftest-engine rejected-tick-falls-back-to-the-fake-oracle
+  (is (= 1 (length (tick! (make-garbage-oracle)))))
+  (is (= 3 squiggle/backend::*last-mood*)))
 
 ;;; --- Tick ---
 

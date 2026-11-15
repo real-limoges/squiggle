@@ -40,10 +40,14 @@ jitter and layers."
 
 ;;; --- State ---
 
+(defun require-entity (canvas id)
+  "Signals when ID is not on CANVAS. Every verb that takes an id goes through this."
+  (unless (find-entity canvas id)
+    (error "No entity ~D on the canvas" id)))
+
 (defun update-entity (canvas id fn)
   "Replace entity ID with (FN entity). Signals when ID is not on CANVAS."
-  (unless (find-entity canvas id)
-    (error "No entity ~D on the canvas" id))
+  (require-entity canvas id)
   (canvas-with canvas
                :entities (mapcar (lambda (entity)
                                    (if (= (entity-id entity) id) (funcall fn entity) entity))
@@ -123,11 +127,18 @@ as applied."))
   (dolist (observer *tick-observers*)
     (observe-tick observer canvas mutations)))
 
+(defun fallback-mutations (canvas rng)
+  "The fake oracle's mutations for CANVAS, for a tick whose own proposals were all rejected."
+  (oracle-result-mutations
+   (squiggle/oracle:propose (squiggle/oracle:make-fake-oracle) canvas rng)))
+
 (defun tick! (oracle)
-  "Returns the oracle's mutations as applied (jitter not included)."
+  "Returns the oracle's mutations as applied (jitter not included).
+When the validator rejects every proposal, the fake oracle's stand in; the mood stays ORACLE's."
   (boot!)
   (let* ((result    (squiggle/oracle:propose oracle *state* (rngs-oracle *rngs*)))
-         (valid     (validate-mutations *state* (oracle-result-mutations result)))
+         (valid     (or (validate-mutations *state* (oracle-result-mutations result))
+                        (fallback-mutations *state* (rngs-oracle *rngs*))))
          (mutations (stamp-layers valid (rngs-jitter *rngs*))))
     (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))

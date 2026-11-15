@@ -3,7 +3,7 @@
 (asdf:defsystem :squiggle
   :description "A silly Jazz inspired living piece of art"
   :author "Real Limoges <b.real.limoges@gmail.com>"
-  :license "MIT"
+  :license "BSD-2-Clause"
   :version "0.1.0"
   :depends-on ()
   :pathname "src/"
