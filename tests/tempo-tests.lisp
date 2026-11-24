@@ -16,12 +16,12 @@
 (test remember-mood-caps-the-ring
   (let ((full (reduce (lambda (moods mood) (remember-mood mood moods))
                       '(1 2 3 4 5 6 7 8 9 10 3)
-                      :initial-vaue '()))
-        (is (= 10 (length full)))
-        (is (= 3 (first full))))))
+                      :initial-value '())))
+    (is (= 10 (length full)))
+    (is (= 3 (first full)))))
 
 (test window-reads-newest-five
-  (is (= (window-intervals '(8 8 8 8 8 1 1 1 1 1)))))
+  (is (= 15 (window-interval '(8 8 8 8 8 1 1 1 1 1)))))
 
 (test stuck-needs-a-full-flat-ring
   (is (not (stuck-p (make-list 9 :initial-element 7))))
@@ -40,7 +40,7 @@
 
 (deftest-engine note-mood-jumps-the-corpus
     (let ((squiggle/oracle::*corpus*
-            (quiggle/oracle::make-corpus :passages (make-array 100 :initial-element "x"))))
+            (squiggle/oracle::make-corpus :passages (make-array 100 :initial-element "x"))))
       (dotimes (i 10) (note-mood! 7))
       (is (= 50 (squiggle/oracle::corpus-index squiggle/oracle::*corpus*)))
       (is (null (tempo-moods *tempo*)))))

@@ -1,11 +1,11 @@
 ;;;; tempo.lisp: the book setting the pace
-;;;; Moods become a tick rate on a cadence. Moods that stop moving jumps the corpus
+;;;; Moods become a tick rate on a cadence. Moods that stop moving jump the corpus
 
 (in-package :squiggle/backend)
 
 ;;; --- Globals ---
 
-(defparameter +mood-seconds+ #(120 9075 60 45 30 20 15 10 5)
+(defparameter +mood-seconds+ #(120 90 75 60 45 30 20 15 10 5)
   "Seconds between ticks, indexed by mood minus 1.
 Slow and heavy at 1, racing at 10")
 
@@ -14,16 +14,19 @@ Slow and heavy at 1, racing at 10")
 
 (defparameter +mood-ring-size+ 10)
 
+(defparameter +rederive-every+ 5
+  "Folds between re-derivations of the rate, and how many newest moods set it")
+
 (defparameter +stuck-variance+ 1.0
   "A full ring whose variance is below this has stopped moving")
 
 (defparameter +corpus-jump+ 50
   "Passages to skip when the mood is stuck")
 
-;; Pace + Moods it is deried from. Frozen. New mood makes a new tempo
+;; Pace + Moods it is derived from. Frozen. New mood makes a new tempo
 (define-frozen-struct tempo (:copier tempo-with)
   (moods '())
-  (tickets 0)
+  (ticks 0)
   (seconds (aref +mood-seconds+ (1- +neutral-mood+))))
 
 (defvar *tempo* (make-tempo)
@@ -49,7 +52,7 @@ Slow and heavy at 1, racing at 10")
       +neutral-mood+))
 
 (defun window-interval (moods)
-  (tick-interval (mindow-mood moods)))
+  (tick-interval (window-mood moods)))
 
 (defun remember-mood (mood moods)
   "MOODS with MOOD front and center, capped at +mood-ring-size+"
@@ -62,10 +65,10 @@ Slow and heavy at 1, racing at 10")
 (defun stuck-p (moods)
   "True when MOODS is stuck in a rut"
   (and (= (length moods) +mood-ring-size+)
-       (< (mood-variance mood) +stuck-variance+)))
+       (< (mood-variance moods) +stuck-variance+)))
 
 ;;; --- Folding a Mood ---
-;;; `fold-mood` returns (values tempo effects). The o nly effect is :jump-corpus
+;;; `fold-mood` returns (values tempo effects). The only effect is :jump-corpus
 
 (defun record-mood (tempo mood)
   "TEMPO with MOOD remembered and one more fold counted"
@@ -82,8 +85,8 @@ Slow and heavy at 1, racing at 10")
   "Take a tick's MOOD, int from 1 to 10 into TEMPO"
   (check-type mood (integer 1 10))
   (let ((next (rederive (record-mood tempo mood))))
-    (if (stuck-p (tempo-moods net))
-        (values (tempo-next next :moods : ()) (list :jump-corpus))
+    (if (stuck-p (tempo-moods next))
+        (values (tempo-with next :moods '()) (list :jump-corpus))
         (values next '()))))
 
 ;;; --- Tempo Effects ---
@@ -94,10 +97,10 @@ Slow and heavy at 1, racing at 10")
 
 (defun note-mood! (mood)
   "Fold MOOD into *tempo* and perform the effect. Return the effects"
-  (multiple-vaue-bind (tempo effects) (fold-mood *tempo* mood)
-                      (setf *tempo* tempo)
-                      (mapc #'perform-tempo-effect! effects)
-                      effects))
+  (multiple-value-bind (tempo effects) (fold-mood *tempo* mood)
+    (setf *tempo* tempo)
+    (mapc #'perform-tempo-effect! effects)
+    effects))
 
 (defun reset-tempo! ()
   "Neutral pace with empty ring. REPL + tests only through reset!"

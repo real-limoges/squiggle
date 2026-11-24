@@ -144,6 +144,6 @@ When the validator rejects every proposal, the fake oracle's stand in; the mood 
     (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))
     (setf *state* (apply-mutations *state* (jitter-mutations *state* (rngs-jitter *rngs*))))
-    (node-mood! (oracle-result-mood result))
+    (note-mood! (oracle-result-mood result))
     (notify-observers *state* mutations)
     mutations))
