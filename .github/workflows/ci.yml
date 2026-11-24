@@ -33,7 +33,7 @@ jobs:
         run: git clone --depth 1 https://github.com/cxxxr/sblint ~/sblint
 
       - name: Fetch strict-build
-        run: git clone --depth 1 https://github.com/real-limoges/strict-build ~/strict-build
+        run: git clone --depth 1 https://github.com/macroexpand-1/strict-build ~/strict-build
 
       - name: Lint
         run: |
