@@ -115,6 +115,7 @@ Runs after validation, which expects the unstamped four-argument :add."
 (defun reset! (&optional seed)
   "For the REPL and tests only; the running piece never resets."
   (when seed (seed-rngs! seed))
+  (reset-tempo!)
   (setf *state* (make-seed-canvas)))
 
 ;;; --- Tick ---
@@ -143,5 +144,6 @@ When the validator rejects every proposal, the fake oracle's stand in; the mood 
     (setf *last-mood* (oracle-result-mood result))
     (setf *state* (apply-mutations *state* mutations))
     (setf *state* (apply-mutations *state* (jitter-mutations *state* (rngs-jitter *rngs*))))
+    (note-mood! (oracle-result-mood result))
     (notify-observers *state* mutations)
     mutations))

@@ -8,7 +8,7 @@
                     (:ppcre :cl-ppcre))
   (:export
    :random-elt :random-id :random-delta
-   :load-passages! :next-passage!
+   :load-passages! :next-passage! :advance-passages! :corpus-not-loaded
    :propose
    :fake-oracle :make-fake-oracle
    :llm-oracle :make-llm-oracle

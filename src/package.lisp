@@ -5,6 +5,7 @@
 (defpackage :squiggle
   (:use :cl)
   (:export
+   :define-frozen-struct
    :+palette+ :+canvas-w+ :+canvas-h+ :+min-scale+ :+max-scale+ :+entity-types+
    :make-entity :entity-with
    :entity-id :entity-type :entity-pos :entity-scale :entity-color :entity-layer
