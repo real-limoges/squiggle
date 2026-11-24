@@ -12,13 +12,14 @@ squiggle/
 │   └── preprocess-corpus.lisp  offline: corpus/book.txt → corpus/passages.txt
 ├── src/
 │   ├── package.lisp        :squiggle base package (shared vocabulary)
+│   ├── frozen.lisp         define-frozen-struct: read-only struct + copier  (:squiggle)
 │   ├── types.lisp          constants, structs, canvas helpers  (:squiggle)
 │   ├── backend/
 │   │   ├── package.lisp     :squiggle/backend defpackage
 │   │   ├── backend.lisp     RNGs, *state*, dispatch, jitter, lifecycle, tick!
 │   │   ├── mutation.lisp    pure mutation verbs (apply-*)
 │   │   ├── validator.lisp   validate-mutation/validate-mutations; wired into tick!
-│   │   ├── tempo.lisp       mood→tick-rate lookup (stub; not yet in any ASDF system)
+│   │   ├── tempo.lisp       mood→tick-rate lookup (stub; the strict build refuses it)
 │   │   └── inspect.lisp     REPL tools: print-state, print-tick, demo
 │   ├── oracle/
 │   │   ├── package.lisp     :squiggle/oracle defpackage (jzon/ppcre nicknames)
@@ -34,6 +35,8 @@ squiggle/
 │   └── frontend/            empty directory
 ├── tests/
 │   ├── package.lisp        :squiggle/tests pkg, suite def, deftest-engine macro
+│   ├── build-tests.lisp    every .lisp file under src/ and tests/ is a component
+│   ├── frozen-tests.lisp   define-frozen-struct's copier and refusals
 │   ├── mutation-tests.lisp unit and property tests for the pure layer
 │   ├── engine-tests.lisp   validator, dispatch, observers, reply parsing, tick!, garbage oracle
 │   └── web-tests.lisp      render-svg and canvas-page tests
@@ -55,10 +58,14 @@ Everything else exists today.
 | `:squiggle/web` | `:squiggle`, `:squiggle/backend` + `hunchentoot`, `cl-who`, `flexi-streams`, `bordeaux-threads` | SVG emitter, pages, SSE server |
 | `:squiggle/tests` | `:squiggle`, `:squiggle/oracle`, `:squiggle/backend`, `:squiggle/web` + `fiveam` | Test suite |
 
+Every system is a strict build (`:defsystem-depends-on ("strict-build")`): any warning from compiling or loading squiggle's own files, style-warnings included, fails the operation.
+Warnings from libraries only print.
+CI clones strict-build beside the checkout.
+
 ## Packages
 
-- **`:squiggle`**: constants (`+palette+`, `+canvas-w+`, `+canvas-h+`, `+entity-types+`, `+min-scale+`, `+max-scale+`), `entity`, `canvas`, and `oracle-result` defstructs (every slot read-only) and their accessors, the copiers `entity-with` and `canvas-with`, `entities`, `find-entity`.
-- **`:squiggle/oracle`**: `*oracle*` defvar, the `propose` generic, the `fake-oracle` and `llm-oracle` structs and their constructors, `generate-mutation`, `random-elt`, `random-id`, `random-delta`, `use-fake-oracle!`, `use-llm-oracle!`, `load-passages!`, `next-passage!`.
+- **`:squiggle`**: `define-frozen-struct`, constants (`+palette+`, `+canvas-w+`, `+canvas-h+`, `+entity-types+`, `+min-scale+`, `+max-scale+`), `entity`, `canvas`, and `oracle-result` structs (every slot read-only) and their accessors, the copiers `entity-with` and `canvas-with`, `entities`, `find-entity`.
+- **`:squiggle/oracle`**: `*oracle*` defvar, the `propose` generic, the `fake-oracle` and `llm-oracle` structs and their constructors, `generate-mutation`, `random-elt`, `random-id`, `random-delta`, `use-fake-oracle!`, `use-llm-oracle!`, `load-passages!`, `next-passage!`, `advance-passages!`, the `corpus-not-loaded` condition.
 - **`:squiggle/backend`**: `*rngs*`, `rngs-oracle`, `rngs-jitter`, `seed-rngs!`, `*state*`, `*tick-observers*`, the `observe-tick` generic, `boot!`, `reset!`, `make-seed-canvas`, `stamp-layers`, `apply-mutation`, `apply-mutations`, `update-entity`, all `apply-*` verbs, `validate-mutation`, `validate-mutations`, `tick!`, `demo`.
   `*last-mood*` is defined but not exported.
 - **`:squiggle/web`**: `render-svg`, `canvas-page`, `about-page`, `start-server!`, `stop-server!`.
@@ -73,7 +80,8 @@ Everything else exists today.
 | `src/package.lisp` | The base `:squiggle` `defpackage` + exports (shared vocabulary). Subsystem packages live beside their code; see the two rows below. |
 | `src/oracle/package.lisp` | `:squiggle/oracle` `defpackage` + exports, with the `(:jzon …)` / `(:ppcre …)` local nicknames. First component of `:squiggle/oracle` so the nicknames resolve against that system's deps. |
 | `src/backend/package.lisp` | `:squiggle/backend` `defpackage` + exports. |
-| `src/types.lisp` | Palette + canvas/scale/type constants. `entity`, `canvas`, and `oracle-result` `defstruct` definitions, every slot `:read-only`. `entity-with` and `canvas-with` build changed copies. `entities` and `find-entity` accessors. (`oracle-result` = `{mutations, mood}`, the shared oracle→engine return contract; it lives here because both oracles produce it and `tick!` consumes it.) |
+| `src/frozen.lisp` | `define-frozen-struct (name (&key copier fixed) &body slot-specs)`: one slot list writes a `defstruct` with every slot `:read-only` and a `copier` taking one keyword per slot not in `fixed`. Refuses at expansion a missing copier, a slot spec that isn't `(slot-name default)`, a fixed name that isn't a slot, or every slot fixed. |
+| `src/types.lisp` | Palette + canvas/scale/type constants. `entity` and `canvas` via `define-frozen-struct` (`entity-with` cannot change `id`, `type` or `layer`); `oracle-result` as a plain `defstruct`, every slot `:read-only`. `entity-with` and `canvas-with` build changed copies. `entities` and `find-entity` accessors. (`oracle-result` = `{mutations, mood}`, the shared oracle→engine return contract; it lives here because both oracles produce it and `tick!` consumes it.) |
 | `src/oracle/oracle.lisp` | The `fake-oracle` struct and the `llm-oracle` struct (read-only `url` and `model`). `*oracle*` defvar, holding a `fake-oracle` instance by default. The `propose (oracle canvas rng)` generic, which returns an `oracle-result`. `use-llm-oracle!` / `use-fake-oracle!` swap the instance in `*oracle*` at runtime. `random-elt`, `random-id`, `random-delta`: shared random-draw helpers used by both oracle impls. |
 | `src/oracle/fake-oracle.lisp` | `+fake-verbs+` and `generate-mutation (verb canvas rng)`, an `ecase` with one branch per verb. `fake-verb (canvas rng)` draws a verb from `+fake-verbs+`, or returns `:add` when the canvas is empty, since the other four verbs need an entity to target. The `propose` method on `fake-oracle` returns an `oracle-result` with one mutation and a random mood 1–10, both drawn from the oracle stream. One mutation per call mirrors the LLM oracle, so swapping oracles doesn't change per-tick density. |
 | `src/oracle/llm-oracle.lisp` | The `propose` method on `llm-oracle` returns an `oracle-result`. Its `handler-case` falls back to the fake oracle on any error, and `proposal-from-reply` falls back when the mood or the mutation is `:none`. `*prompt-template*` and `+token-punctuation+` defparameters; `build-prompt`; `json-object` helper; `call-ollama (llm-oracle prompt)` (dexador→Ollama, jzon decode). Pure scanners: `scan-mood` (ppcre `MOOD=(\d+)`, an integer or `:none`), and `scan-keywords` and `scan-numbers`, which read `reply-tokens` (the reply split on whitespace, each token trimmed of `+token-punctuation+`, so `coral,` and `(340` parse). `parse-response (text)` → internal `parsed` struct. `assemble-mutation (parsed canvas rng)` returns one mutation or `:none` (priority add > recolor > nudge); on an empty canvas the recolor and nudge branches give `:none`, so the fake oracle's `:add` stands in. The `parsed` struct (Qwen token bags) is defined here and never leaves this file. |
@@ -81,8 +89,8 @@ Everything else exists today.
 | `src/backend/mutation.lisp` | One function per verb: `apply-nudge`, `apply-recolor`, `apply-resize`, `apply-add`, `apply-remove`. Pure: canvas in, new canvas out, built with `entity-with` and `canvas-with`. Validation is the validator's job, but every verb that takes an id signals on a missing one. |
 | `src/backend/inspect.lisp` | `print-entity`, `print-state`, `print-tick`. `demo` loads the seed canvas and runs N ticks with output. REPL convenience only; not called by the engine. Ticks with `*oracle*`. |
 | `src/backend/validator.lisp` | `validate-mutation (canvas mutation)` returns the mutation or `:rejected`, and `validate-mutations (canvas mutations)` keeps the survivors. A proposal is dropped only for invalidity: unknown verb, improper list, wrong arity, off-palette color, off-vocabulary type, non-numeric argument, a resize factor that is not positive, or an id not on the canvas. `:add` coordinates are clamped to canvas bounds rather than rejected. Never aesthetic. `tick!` calls `validate-mutations` on the oracle-result's mutations before stamping layers. |
-| `src/oracle/corpus.lisp` | The `corpus` struct (read-only `passages` vector; mutable `index`), held in `*corpus*`. `load-passages!` reads a passages file into a fresh corpus and returns `:loaded`; its default path is `default-passages-path`, `corpus/passages.txt` resolved against the `:squiggle` system (`asdf:system-relative-pathname`), so it does not depend on the process's working directory. `next-passage!` returns the current passage and advances the index, wrapping at the end. The index is not yet persisted to disk. |
-| `src/backend/tempo.lisp` *(stub)* | Today only `tick-interval` with an empty body, outside every ASDF system. Planned: mood→rate lookup (`tick-interval`, re-derived on a ~5-tick cadence from a ring of recent moods that `tick!` feeds; no separate Qwen query, since mood rides in each `oracle-result`), low-variance → corpus jump. |
+| `src/oracle/corpus.lisp` | The frozen `corpus` struct (`passages` vector, fixed; `index`), held in `*corpus*` and replaced by a copy whenever the index moves. `load-passages!` reads a passages file into a fresh corpus and returns `:loaded`; its default path is `default-passages-path`, `corpus/passages.txt` resolved against the `:squiggle` system (`asdf:system-relative-pathname`), so it does not depend on the process's working directory. `skip-passages` is the pure move, wrapping at the end through `wrap-index`. `next-passage!` returns the current passage and moves one ahead, and signals `corpus-not-loaded` on an empty corpus. `advance-passages!` jumps N ahead and returns `:advanced` or `:not-loaded`. The index is not yet persisted to disk. |
+| `src/backend/tempo.lisp` *(stub)* | Today only `tick-interval` with an empty body; a component of `:squiggle/backend`, which the strict build refuses for the unused `mood` until the tempo guide replaces it. Planned: mood→rate lookup (`tick-interval`, re-derived on a ~5-tick cadence from a ring of recent moods that `tick!` feeds; no separate Qwen query, since mood rides in each `oracle-result`), low-variance → corpus jump. |
 | `loop.lisp` *(planned)* | Thin wrapper: calls `(tick! *oracle*)` on a background thread, sleeping the tempo's derived interval between ticks. The only place that runs forever. |
 | `src/web/package.lisp` | `:squiggle/web` `defpackage` + exports. |
 | `src/web/svg.lisp` | `render-svg`: pure `canvas → svg-string`, painted back to front by `paint-order` (layer ascending, ties by id). `entity-rect` draws each entity as a placeholder square sized by `+base-size+` and scale, filled from `+palette-hex+` (`fill-hex` signals on an off-palette color), until per-shape treatment is settled. |
@@ -90,7 +98,7 @@ Everything else exists today.
 | `src/web/server.lisp` | `squiggle-acceptor` dispatching `/`, `/about`, `/events`. The `server` struct (read-only `acceptor` and `lock`; mutable `viewers` and `frame`) is held in `*server*`, which is `:stopped` when nothing runs. `frame` holds the last committed SVG, so handlers never read `*state*`. The server is its own tick observer: its `observe-tick` method renders once and calls `broadcast-frame!`. `send-to-viewer!` returns `:sent`, `:dropped` or `:unknown` and drops dead streams. `events-stream` sends a keep-alive every `+ping-seconds+`. `start-server!` (`&key port`, default 8080) signals if a server is running and registers the observer; `stop-server!` removes it and returns `:stopped` or `:not-running`. |
 | `log.lisp` *(planned)* | SQLite append-only log of applied mutations (post-validator, post-jitter). |
 | `debug-page.lisp` *(planned)* | `/debug` HTML: sparklines for entity count, mutations/tick, mood timeline, corpus pointer. |
-| `tests/` | `mutation-tests.lisp`: unit tests and fiveam `for-all` property tests on the pure mutation layer. `engine-tests.lisp`: validator, dispatch, LLM reply parsing (punctuation, empty canvas), observer and `tick!` tests, including a tick from an empty canvas, plus a `garbage-oracle` struct whose `propose` method returns only invalid proposals (`+garbage-mutations+`), ticked to check the canvas stays valid and the fake-oracle fallback fires. `web-tests.lisp`: seven `render-svg` and `canvas-page` tests. Never real Qwen. |
+| `tests/` | `build-tests.lisp`: every `.lisp` file under `src/` and `tests/` is a component of some system in `squiggle.asd`, and the listing found files at all. `frozen-tests.lisp`: `entity-with` swaps only what it's passed, and `define-frozen-struct` refuses bad definitions. `mutation-tests.lisp`: unit tests and fiveam `for-all` property tests on the pure mutation layer. `engine-tests.lisp`: validator, dispatch, LLM reply parsing (punctuation, empty canvas), observer and `tick!` tests, including a tick from an empty canvas, plus a `garbage-oracle` struct whose `propose` method returns only invalid proposals (`+garbage-mutations+`), ticked to check the canvas stays valid and the fake-oracle fallback fires. `web-tests.lisp`: seven `render-svg` and `canvas-page` tests. Never real Qwen. |
 
 ## State Shape
 

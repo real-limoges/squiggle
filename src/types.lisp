@@ -9,38 +9,21 @@
 (defparameter +max-scale+ 2.5)
 (defparameter +entity-types+ '(:blob :squiggle :triangle :curve))
 
-(defstruct entity
-  (id    nil :read-only t)
-  (type  nil :read-only t)
-  (pos   nil :read-only t)
-  (scale nil :read-only t)
-  (color nil :read-only t)
-  (layer nil :read-only t))
+(define-frozen-struct entity (:copier entity-with :fixed (id type layer))
+  (id    nil)
+  (type  nil)
+  (pos   nil)
+  (scale nil)
+  (color nil)
+  (layer nil))
 
-(defstruct canvas
-  (next-id  1   :read-only t)
-  (entities '() :read-only t))
+(define-frozen-struct canvas (:copier canvas-with)
+  (next-id  1)
+  (entities '()))
 
 (defstruct oracle-result
   (mutations '() :read-only t)
   (mood      :none :read-only t))
-
-(defun entity-with (entity &key (pos   (entity-pos entity))
-                                (scale (entity-scale entity))
-                                (color (entity-color entity)))
-  "A copy of ENTITY with POS, SCALE or COLOR changed. Id, type and layer never
-change."
-  (make-entity :id    (entity-id entity)
-               :type  (entity-type entity)
-               :pos   pos
-               :scale scale
-               :color color
-               :layer (entity-layer entity)))
-
-(defun canvas-with (canvas &key (next-id  (canvas-next-id canvas))
-                                (entities (canvas-entities canvas)))
-  "A copy of CANVAS with NEXT-ID or ENTITIES changed."
-  (make-canvas :next-id next-id :entities entities))
 
 (defun entities (canvas)
   (canvas-entities canvas))

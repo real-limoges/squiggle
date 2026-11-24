@@ -2,10 +2,12 @@
 
 (in-package :squiggle/oracle)
 
-(defstruct corpus
-  (passages #() :read-only t)
-  ;; mutable
-  (index 0))
+(define-frozen-struct corpus (:copier corpus-with :fixed (passages))
+  (passages #())
+  (index    0))
+
+(define-condition corpus-not-loaded (error) ()
+  (:report "No passages are loaded; call load-passages! first"))
 
 (defvar *corpus* (make-corpus)
   "The loaded book and the passage the piece is on")
@@ -14,17 +16,34 @@
   "corpus/passages.txt in the repo, wherever the process was started."
   (asdf:system-relative-pathname :squiggle "corpus/passages.txt"))
 
+(defun corpus-loaded-p (corpus)
+  (plusp (length (corpus-passages corpus))))
+
+(defun wrap-index (corpus index)
+  "INDEX wrapped onto CORPUS's passages"
+  (mod index (length (corpus-passages corpus))))
+
+(defun skip-passages (corpus n)
+  "CORPUS moved N passages ahead, wrapping to the start at the end of the book"
+  (corpus-with corpus :index (wrap-index corpus (+ (corpus-index corpus) n))))
+
 (defun load-passages! (&optional (path (default-passages-path)))
   "Load PATH from its first passage. Returns :loaded."
   (setf *corpus* (make-corpus :passages (coerce (uiop:read-file-lines path) 'vector)))
   :loaded)
 
-(defun advance-index! (corpus)
-  "Wraps to the start at the end of the book."
-  (setf (corpus-index corpus)
-        (mod (1+ (corpus-index corpus)) (length (corpus-passages corpus)))))
-
 (defun next-passage! ()
+  "Signals corpus-not-loaded before load-passages!"
   (let ((corpus *corpus*))
-    (prog1 (aref (corpus-passages corpus) (corpus-index corpus))
-      (advance-index! corpus))))
+    (unless (corpus-loaded-p corpus)
+      (error 'corpus-not-loaded))
+    (setf *corpus* (skip-passages corpus 1))
+    (aref (corpus-passages corpus) (corpus-index corpus))))
+
+(defun advance-passages! (n)
+  "Skip N passages ahead wrapping at the end of the book.
+Returns :advanced or :not-loaded (before load-passages!)"
+  (let ((corpus *corpus*))
+    (cond ((not (corpus-loaded-p corpus)) :not-loaded)
+          (t (setf *corpus* (skip-passages corpus n))
+             :advanced))))

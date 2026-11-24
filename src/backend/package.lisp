@@ -11,4 +11,7 @@
    :apply-nudge :apply-recolor :apply-resize :apply-add :apply-remove
    :validate-mutation :validate-mutations
    :tick!
+   :tempo :make-tempo :tempo-moods :tempo-ticks :tempo-seconds :*tempo*
+   :tick-interval :window-interval :remember-mood :mood-variance :stuck-p
+   :fold-mood :note-mood! :reset-tempo!
    :demo))
