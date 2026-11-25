@@ -75,10 +75,21 @@
 
 (deftest-engine llm-reply-assembles-an-add
   (let ((result (squiggle/oracle::proposal-from-reply
-                 (squiggle/oracle::parse-response "MOOD=8 coral squiggle 340 120")
+                 (squiggle/oracle::parse-response "MOOD=8 coral squiggle 42 61")
                  *state* (rngs-oracle *rngs*))))
     (is (= 8 (oracle-result-mood result)))
-    (is (equal '((:add :squiggle 340 120 :coral)) (oracle-result-mutations result)))))
+    (is (equal '((:add :squiggle 336 305 :coral)) (oracle-result-mutations result)))))
+
+(defun assembled-position (reply)
+  "The x and y of the :add assembled from REPLY on an empty canvas."
+  (subseq (squiggle/oracle::assemble-mutation (squiggle/oracle::parse-response reply)
+                                              (make-canvas) (rngs-oracle *rngs*))
+          2 4))
+
+(deftest-engine add-percentages-span-the-canvas
+  (is (equal '(0 0) (assembled-position "MOOD=5 blob 0 0")))
+  (is (equal '(400 250) (assembled-position "MOOD=5 blob 50 50")))
+  (is (equal '(800 500) (assembled-position "MOOD=5 blob 100 100"))))
 
 (deftest-engine llm-reply-without-a-mood-falls-back
   (is (eq :none (squiggle/oracle::scan-mood "coral squiggle 340 120")))

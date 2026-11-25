@@ -18,14 +18,21 @@ Where:
 - N is 1-10. 1 = slow, heavy, blue. 10 = racing, manic, electric.
   Don't default to 5 — use the full range.
 - Words come from: teal, coral, cream, ink, mustard, blob, squiggle, triangle, curve
-- Numbers are integers 0-800
+- Numbers are percentages 0-100, in pairs: across, then down
 
-Example: \"MOOD=8 coral squiggle 340 teal blob 120 triangle 600 mustard\"
+Example: \"MOOD=8 coral squiggle 42 61 teal blob 15 88 triangle mustard\"
 
 Don't explain. Just the score and the words.")
 
 (defparameter +token-punctuation+ ".,;:!?()[]{}\"'"
   "Trimmed from both ends of each reply token, so coral, still reads as coral")
+
+(defparameter +reply-max-tokens+ 64
+  "Cap on a reply's length. A normal reply is about 20 tokens; without a cap
+Qwen sometimes runs on for thousands and the call times out")
+
+(defparameter +reply-timeout-seconds+ 10
+  "How long call-llama-server waits for a reply before signaling")
 
 (defstruct parsed
   (mood    :none :read-only t)
@@ -34,18 +41,28 @@ Don't explain. Just the score and the words.")
   (numbers '()   :read-only t))
 
 (defun json-object (&rest plist)
-  "Takes string keys."
+  "A hash table for jzon to encode. Takes string keys."
   (let ((h (make-hash-table :test 'equal)))
     (loop for (k v) on plist by #'cddr do (setf (gethash k h) v))
-    (jzon:stringify h)))
+    h))
 
-(defun call-ollama (llm-oracle prompt)
-  (let ((response (dex:post (llm-oracle-url llm-oracle)
-                            :headers '(("Content-Type" . "application/json"))
-                            :content (json-object "model" (llm-oracle-model llm-oracle)
-                                                  "prompt" prompt
-                                                  "stream" nil))))
-    (gethash "response" (jzon:parse response))))
+(defun chat-request (prompt)
+  "PROMPT as one user message; llama-server wraps it in the model's chat template."
+  (jzon:stringify
+   (json-object "messages" (vector (json-object "role" "user" "content" prompt))
+                "max_tokens" +reply-max-tokens+
+                "stream" nil)))
+
+(defun reply-content (response)
+  "The text of the first choice in a chat completion RESPONSE."
+  (let ((choice (aref (gethash "choices" (jzon:parse response)) 0)))
+    (gethash "content" (gethash "message" choice))))
+
+(defun call-llama-server (llm-oracle prompt)
+  (reply-content (dex:post (llm-oracle-url llm-oracle)
+                           :headers '(("Content-Type" . "application/json"))
+                           :content (chat-request prompt)
+                           :read-timeout +reply-timeout-seconds+)))
 
 (defun build-prompt (passage)
   (format nil *prompt-template* passage))
@@ -72,17 +89,25 @@ Don't explain. Just the score and the words.")
         for n = (parse-integer tok :junk-allowed t)
         when n collect n))
 
+(defun percent-of (percent extent)
+  "PERCENT of EXTENT, rounded down. The prompt asks for positions as percentages."
+  (floor (* percent extent) 100))
+
 (defun assemble-mutation (parsed canvas rng)
   "An :add if there is a shape and two numbers, else a :recolor if there is a
 color, else a :nudge if there are two numbers, else :none. The :recolor and
-:nudge need an entity to target, so an empty CANVAS gives :none for them."
+:nudge need an entity to target, so an empty CANVAS gives :none for them.
+An :add's numbers are percentages across and down the canvas; a :nudge's are
+pixel offsets as given."
   (let ((shape    (first (parsed-shapes parsed)))
         (color    (first (parsed-colors parsed)))
         (nums     (parsed-numbers parsed))
         (targets? (entities canvas)))
     (cond
       ((and shape (>= (length nums) 2))
-       (list :add shape (first nums) (second nums)
+       (list :add shape
+             (percent-of (first nums) +canvas-w+)
+             (percent-of (second nums) +canvas-h+)
              (or color (random-elt +palette+ rng))))
       ((and color targets?)
        (list :recolor (random-id canvas rng) color))
@@ -105,9 +130,9 @@ color, else a :nudge if there are two numbers, else :none. The :recolor and
         (make-oracle-result :mutations (list mutation) :mood mood))))
 
 (defmethod propose ((llm-oracle llm-oracle) canvas rng)
-  "Falls back to the fake oracle when Ollama fails or the reply is unusable."
+  "Falls back to the fake oracle when llama-server fails or the reply is unusable."
   (handler-case
       (proposal-from-reply
-       (parse-response (call-ollama llm-oracle (build-prompt (next-passage!))))
+       (parse-response (call-llama-server llm-oracle (build-prompt (next-passage!))))
        canvas rng)
     (error () (propose (make-fake-oracle) canvas rng))))
