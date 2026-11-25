@@ -8,17 +8,34 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The build runs on Arch, not the runner's own OS.
+    container: archlinux:base
+    env:
+      # Pinned to match the local SBCL. The sha256 was checked against the
+      # SHA-1 SourceForge lists for this file on 2026-11-24.
+      SBCL_VERSION: 2.6.10
+      SBCL_SHA256: 96e26b0be3aa6ca2a3f03dfd5fc117647fffb96790a9c235e8dcf27df2eba726
     steps:
+      - name: Install packages
+        run: pacman -Syu --noconfirm git curl bzip2 tar
+
       - uses: actions/checkout@v4
 
       - name: Install SBCL
-        run: sudo apt-get update && sudo apt-get install -y sbcl curl
+        run: |
+          curl -fsSL -o sbcl.tar.bz2 \
+            "https://downloads.sourceforge.net/project/sbcl/sbcl/$SBCL_VERSION/sbcl-$SBCL_VERSION-x86-64-linux-binary.tar.bz2"
+          echo "$SBCL_SHA256  sbcl.tar.bz2" | sha256sum -c -
+          tar -xjf sbcl.tar.bz2 -C /tmp
+          (cd "/tmp/sbcl-$SBCL_VERSION-x86-64-linux" && sh install.sh)
+          rm sbcl.tar.bz2
+          sbcl --version
 
       - name: Cache Quicklisp
         uses: actions/cache@v4
         with:
           path: ~/quicklisp
-          key: quicklisp-${{ runner.os }}
+          key: quicklisp-archlinux
 
       - name: Install Quicklisp
         run: |
@@ -53,3 +70,12 @@ jobs:
                --eval "(push #p\"$GITHUB_WORKSPACE/\" asdf:*central-registry*)" \
                --eval '(ql:quickload :squiggle/tests)' \
                --eval '(uiop:quit (if (uiop:symbol-call :fiveam :run! :squiggle) 0 1))'
+
+      - name: Smoke run
+        run: |
+          sbcl --non-interactive \
+               --load ~/quicklisp/setup.lisp \
+               --eval "(push #p\"$HOME/strict-build/\" asdf:*central-registry*)" \
+               --eval "(push #p\"$GITHUB_WORKSPACE/\" asdf:*central-registry*)" \
+               --eval '(ql:quickload :squiggle/web)' \
+               --load ci/smoke.lisp

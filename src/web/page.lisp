@@ -8,7 +8,7 @@
 (defparameter +page-css+
   "body { margin: 0; background: #f6ecd2; font-family: sans-serif; }
 #stage { position: relative; width: min(100vw, 1000px); aspect-ratio: 8 / 5; margin: 0 auto; }
-#stage svg { position: absolute; inset: 0; width: 100%; height: 100%; animation: fade-in 0.8s ease both; }
+#stage svg { position: absolute; inset: 0; width: 100%; height: 100%; background: #f6ecd2; animation: fade-in 0.8s ease both; }
 @keyframes fade-in { from { opacity: 0; } }")
 
 (defparameter +page-js+

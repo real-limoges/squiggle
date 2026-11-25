@@ -40,6 +40,7 @@ qlfile.lock.local
 
 # Project-specific
 corpus/
+models/
 CLAUDE.md
 
 .vscode
