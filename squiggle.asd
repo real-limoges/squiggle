@@ -73,6 +73,7 @@
                (:file "mutation-tests")
                (:file "engine-tests")
                (:file "tempo-tests")
+               (:file "boot-tests")
                (:file "web-tests"))
   :perform (asdf:test-op (op c)
                          (uiop:symbol-call :fiveam :run! :squiggle)))
